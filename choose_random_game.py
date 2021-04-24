@@ -11,9 +11,9 @@ from aesgard.steam import playgame
 from aesgard.util  import normalizeString
 from aesgard.util  import checkExeFile
 
-def main():
+def run():
     config = configparser.ConfigParser()
-    config.read('choose_random_game.ini')
+    config.read("choose_random_game.ini")
     
     content = []
     linksList = []
@@ -22,10 +22,10 @@ def main():
     steamid       = config['STEAM']['steamid']
     steamUserName = config['STEAM']['username']
 
-    steamGames = getownedgames(apikey, steamid)
+    steamGames = getownedgames(config['STEAM']['ownedGamesURL'], apikey, steamid)
     
+    baseLink = config['CONFIG']['baseLinks']
     for key, link in config.items("FOLDERSWITHLINKS"):
-        baseLink = config['CONFIG']['baseLinks']
         if baseLink:
             linksList = linksList + [s for s in next(os.walk(baseLink + link))[2]]
         else:
@@ -64,7 +64,7 @@ def main():
     print("CHOOSED -----------> " + choosedGame + " <-----------")
     
     with open(config['FILES']['pathToSave'] + config['FILES']['gamesOwnedFileName'], 'w', encoding='utf-8') as f:
-        for id, name in get_steam_game_ids(steamUserName).items():
+        for id, name in get_steam_game_ids(config['STEAM']['gamesInfoURL'], steamUserName).items():
             f.write("{},{}\n".format(id, name))
     
     for launch in next(os.walk(choosedGame))[2]:
@@ -80,7 +80,7 @@ def main():
         choosed = normalizeString(choosedGame[posLastBar:])
         if (name == choosed  or jellyfish.levenshtein_distance(name, choosed) == 2):
            print("Calling STEAM app ID " + str(steamGame['appid']) + " (" + steamGame['name'] + ")")
-           playgame(steamGame)
+           playgame(config['STEAM']['playGameURL'], steamGame)
            sys.exit() 
            
     if "DOSBOX" in choosedGame:
@@ -113,4 +113,4 @@ def main():
     #Mbox(str(len(content)) + ' jogos!!!! JOGUE UM ',  game , 0)
 
 if __name__ == '__main__':
-    main()
+    run()
