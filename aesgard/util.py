@@ -18,3 +18,15 @@ def Mbox(title, text, style):
     ctypes.windll.user32.MessageBoxW(0, text, title, style)
     
 #Mbox(str(len(content)) + ' jogos!!!! JOGUE UM ',  game , 0)
+
+def writeListToFile(fileName, content):
+    with open(fileName, 'w+', encoding="utf-8") as filehandle:  
+        for listitem in content:
+            filehandle.write('{}\n'.format(listitem))
+            
+def writeTupleToFile(fileName, _tuple):
+    with open(fileName, 'w+', encoding='utf-8') as filehandle:
+        for first, second in _tuple:
+            filehandle.write("{},{}\n".format(first, second))
+    
+            

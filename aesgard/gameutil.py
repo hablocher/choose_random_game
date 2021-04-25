@@ -29,7 +29,7 @@ def findLaunchAndStart(choosedGame, launcherPrefixes, shortcutExt):
                    print("Calling '" + launch + "'")
                    os.chdir(choosedGame)
                    os.startfile(launch)
-                   sys.exit() 
+                   sys.exit(0) 
                    
 def findSteamGameAndLaunch(steamGames, choosedGame, playGameURL, chooseNotInstalled):
    if not chooseNotInstalled:
@@ -40,19 +40,19 @@ def findSteamGameAndLaunch(steamGames, choosedGame, playGameURL, chooseNotInstal
             if (name == choosed  or jellyfish.levenshtein_distance(name, choosed) == 2):
                print("Calling STEAM app ID " + str(steamGame['appid']) + " (" + steamGame['name'] + ")")
                playgame(playGameURL, steamGame)
-               sys.exit() 
+               sys.exit(0) 
    else:
        if choosedGame.startswith("steam:"):
            pos = choosedGame.rfind(":") + 1
            print("Calling STEAM app ID " + choosedGame)
            print(choosedGame[pos:])
            playgameid(playGameURL, choosedGame[pos:])
-           sys.exit() 
+           sys.exit(0) 
                    
 def openDOSBOX(choosedGame, DOSBOXShortcut):
     if "DOSBOX" in choosedGame:
         os.startfile(DOSBOXShortcut)
-        sys.exit() 
+        sys.exit(0) 
 
 def executeEXE(choosedGame):
     """
@@ -82,13 +82,19 @@ def executeEXE(choosedGame):
                 print("Calling EXE '" + launch + "'")
                 os.chdir(choosedGame)
                 os.startfile(launch)
-                sys.exit() 
+                sys.exit(0) 
                
     if (exeCount == 1):
         print("Calling EXE '" + exeFile + "'")
         os.chdir(exeFolder)
         os.startfile(exeFile)
-        sys.exit() 
+        sys.exit(0) 
+
+def fallBackToGameFolder(choosedGame):
+    # Fallback and open the game folder
+    print("Opening folder '" + choosedGame + "'")
+    os.startfile(choosedGame)
+    sys.exit(0)
         
 def preparelinksList(foldersWithLinks, baseLinks, removals):
     linksList = []
