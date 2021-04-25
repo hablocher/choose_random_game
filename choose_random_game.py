@@ -39,13 +39,15 @@ def run():
     removals                = config.items("REMOVALS")
     launchPrefixes          = config.items("LAUCHERPREFIXES")    
     
+    steamOwnedGames = get_steam_game_ids(steamGamesOwnedInfoURL, steamUserName).items();
+    
     content = list(set(
         prepareContent(
             gameFolders, 
             gameCommonFolders, 
             steamGameFolders, 
             preparelinksList(foldersWithLinks, baseLinks, removals),
-            get_steam_game_ids(steamGamesOwnedInfoURL, steamUserName).items(),
+            steamOwnedGames,
             chooseNotInstalled)
         ))    
     
@@ -53,9 +55,9 @@ def run():
         for listitem in content:
             filehandle.write('%s\n' % listitem)
     
-    with open(pathToSave + steamGamesOwnedFileName, 'w+', encoding='utf-8') as f:
-        for id, name in get_steam_game_ids(steamGamesOwnedInfoURL, steamUserName).items():
-            f.write("{},{}\n".format(id, name))
+    with open(pathToSave + steamGamesOwnedFileName, 'w+', encoding='utf-8') as filehandle:
+        for id, name in steamOwnedGames:
+            filehandle.write("{},{}\n".format(id, name))
 
     # Choosing
     random.shuffle(content)
