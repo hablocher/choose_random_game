@@ -21,66 +21,61 @@ def checkExeFile(launch, choosed):
         return True
     return False    
 
-def findLaunchAndStart(choosedGame, launcherPrefixes, shortcutExt):
-    if os.path.isdir(choosedGame):
-        for launch in next(os.walk(choosedGame))[2]:
+def findLauncherAndStart(launcherPrefixes, shortcutExt):
+    if os.path.isdir(__CHOOSEDGAME__):
+        for launch in next(os.walk(__CHOOSEDGAME__))[2]:
             for key, prefix in launcherPrefixes:
                 if (launch.lower().startswith(prefix.lower()) and launch.lower().endswith(shortcutExt)): 
                    print("Calling '" + launch + "'")
-                   os.chdir(choosedGame)
+                   os.chdir(__CHOOSEDGAME__)
                    os.startfile(launch)
                    sys.exit(0) 
                    
-def findSteamGameAndLaunch(steamGames, choosedGame, playGameURL, chooseNotInstalled):
+def findSteamGameAndLaunch(steamGames, playGameURL, chooseNotInstalled):
    if not chooseNotInstalled:
-       posLastBar = choosedGame.rfind("/")+1
+       posLastBar = __CHOOSEDGAME__.rfind("/")+1
        for steamGame in steamGames:  
             name = normalizeString(steamGame['name'])
-            choosed = normalizeString(choosedGame[posLastBar:])
+            choosed = normalizeString(__CHOOSEDGAME__[posLastBar:])
             if (name == choosed  or jellyfish.levenshtein_distance(name, choosed) == 2):
                print("Calling STEAM app ID " + str(steamGame['appid']) + " (" + steamGame['name'] + ")")
                playgame(playGameURL, steamGame)
                sys.exit(0) 
    else:
-       if choosedGame.startswith("steam:"):
-           pos = choosedGame.rfind(":") + 1
-           print("Calling STEAM app ID " + choosedGame)
-           print(choosedGame[pos:])
-           playgameid(playGameURL, choosedGame[pos:])
+       if __CHOOSEDGAME__.startswith("steam:"):
+           pos = __CHOOSEDGAME__.rfind(":") + 1
+           print("Calling STEAM app ID " + __CHOOSEDGAME__)
+           print(__CHOOSEDGAME__[pos:])
+           playgameid(playGameURL, __CHOOSEDGAME__[pos:])
            sys.exit(0) 
                    
-def openDOSBOX(choosedGame, DOSBOXShortcut):
-    if "DOSBOX" in choosedGame:
+def openDOSBOX(DOSBOXShortcut):
+    if "DOSBOX" in __CHOOSEDGAME__:
         os.startfile(DOSBOXShortcut)
         sys.exit(0) 
 
-def executeEXE(choosedGame):
+def executeEXE():
     """
     Execute EXE if the folder contains ONLY one EXE or
     the EXE name is similar (levenshtein distance) to game name
-
-    Parameters
-    ----------
-    choosedGame : TYPE
-        DESCRIPTION.
 
     Returns
     -------
     None.
 
     """
-    posLastBar = choosedGame.rfind("/")
+    posLastBar = __CHOOSEDGAME__.rfind("/")
     exeCount = 0
     exeFolder = ""
     exeFile = ""
-    for launch in next(os.walk(choosedGame))[2]:
+    for launch in next(os.walk(__CHOOSEDGAME__))[2]:
         if launch.lower().endswith('.exe'):
             exeCount += 1
-            exeFolder = choosedGame
+            exeFolder = __CHOOSEDGAME__
             exeFile = launch
-            if checkExeFile(launch.lower(), choosedGame[posLastBar:].lower()):
+            if checkExeFile(launch.lower(), __CHOOSEDGAME__[posLastBar:].lower()):
                 print("Calling EXE '" + launch + "'")
-                os.chdir(choosedGame)
+                os.chdir(__CHOOSEDGAME__)
                 os.startfile(launch)
                 sys.exit(0) 
                
@@ -90,10 +85,10 @@ def executeEXE(choosedGame):
         os.startfile(exeFile)
         sys.exit(0) 
 
-def fallBackToGameFolder(choosedGame):
+def fallBackToGameFolder():
     # Fallback and open the game folder
-    print("Opening folder '" + choosedGame + "'")
-    os.startfile(choosedGame)
+    print("Opening folder '" + __CHOOSEDGAME__ + "'")
+    os.startfile(__CHOOSEDGAME__)
     sys.exit(0)
         
 def preparelinksList(foldersWithLinks, baseLinks, removals):
@@ -126,5 +121,8 @@ def prepareContent(gameFolders, gameCommonFolders, steamGameFolders, linksList, 
         content = content + ["steam:" + ":" + name + ":" + str(id) for id, name in steamOwnedGames]
                 
     return content
-        
 
+def init(choosedgame):
+    global __CHOOSEDGAME__
+    __CHOOSEDGAME__ = choosedgame
+ 

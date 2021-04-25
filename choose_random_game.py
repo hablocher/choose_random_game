@@ -1,9 +1,10 @@
 import random
-import configparser 
+import sys
 
 from aesgard.steam     import getownedgames
 from aesgard.steam     import get_steam_game_ids
-from aesgard.gameutil  import findLaunchAndStart
+from aesgard.gameutil  import init as gameUtilInit
+from aesgard.gameutil  import findLauncherAndStart
 from aesgard.gameutil  import findSteamGameAndLaunch
 from aesgard.gameutil  import openDOSBOX
 from aesgard.gameutil  import executeEXE
@@ -12,10 +13,10 @@ from aesgard.gameutil  import preparelinksList
 from aesgard.gameutil  import fallBackToGameFolder
 from aesgard.util      import writeListToFile
 from aesgard.util      import writeTupleToFile
+from aesgard.util      import readConfigFile
 
-def run():
-    config = configparser.ConfigParser()
-    config.read("choose_random_game.ini")
+def run(argv):
+    config = readConfigFile(argv)
     
     apikey                  = config['STEAM']['apikey']
     steamid                 = config['STEAM']['steamid']
@@ -64,16 +65,18 @@ def run():
     # Choosing game
     random.shuffle(content)
     choosedGame = random.choice(content)
+    gameUtilInit(choosedGame)
     
     print("You have " + str(len(content)) + " games to play!")
     print("CHOOSED -----------> " + choosedGame + " <-----------")
 
     # Executing choosed game
-    findLaunchAndStart(choosedGame, launchPrefixes, shortcutExt)
-    findSteamGameAndLaunch(getownedgames(ownedGamesURL, apikey, steamid), choosedGame, playGameURL, chooseNotInstalled)
-    openDOSBOX(choosedGame, DOSBOXShortcut)
-    executeEXE(choosedGame)
-    fallBackToGameFolder(choosedGame)
+    findLauncherAndStart(launchPrefixes, shortcutExt)
+    findSteamGameAndLaunch(getownedgames(ownedGamesURL, apikey, steamid), playGameURL, chooseNotInstalled)
+    openDOSBOX(DOSBOXShortcut)
+    executeEXE()
+    fallBackToGameFolder()
+    
  
 if __name__ == '__main__':
-    run()
+    run(sys.argv)
