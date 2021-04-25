@@ -54,7 +54,7 @@ def run():
     
     with open(pathToSave + gamesFoundFileName, 'w+', encoding="utf-8") as filehandle:  
         for listitem in content:
-            filehandle.write('%s\n' % listitem)
+            filehandle.write('{}\n'.format(listitem))
     
     with open(pathToSave + steamGamesOwnedFileName, 'w+', encoding='utf-8') as filehandle:
         for id, name in steamOwnedGames:
