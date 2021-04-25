@@ -49,9 +49,12 @@ def findSteamGameAndLaunch(steamGames, playGameURL, chooseNotInstalled):
            playgameid(playGameURL, __CHOOSEDGAME__[pos:])
            sys.exit(0) 
                    
-def openDOSBOX(DOSBOXShortcut):
+def openDOSBOX(DOSBOXLocation, DOSBOXExecutable, DOSBOXParameters):
     if "DOSBOX" in __CHOOSEDGAME__:
-        os.startfile(DOSBOXShortcut)
+        posLastBar = __CHOOSEDGAME__.rfind("/")+1
+        DOSBOXParameters = DOSBOXParameters.format('"cd ' + __CHOOSEDGAME__[posLastBar:] + '"')
+        os.chdir(DOSBOXLocation)
+        os.system(DOSBOXExecutable + " " + DOSBOXParameters)
         sys.exit(0) 
 
 def executeEXE():

@@ -21,8 +21,6 @@ import sys
 def Mbox(title, text, style):
     ctypes.windll.user32.MessageBoxW(0, text, title, style)
     
-#Mbox(str(len(content)) + ' jogos!!!! JOGUE UM ',  game , 0)
-
 def writeListToFile(fileName, content):
     with open(fileName, 'w+', encoding="utf-8") as filehandle:  
         for listitem in content:
@@ -35,7 +33,7 @@ def writeTupleToFile(fileName, _tuple):
     
 def readConfigFile(argv):
     config = configparser.ConfigParser()
-    myopts, args = getopt.getopt(sys.argv[1:],"i:o:")
+    myopts, args = getopt.getopt(sys.argv[1:],"i:")
     for opt, arg in myopts:
         if opt == '-i':
            if os.path.isfile(arg):

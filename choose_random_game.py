@@ -28,9 +28,12 @@ def run(argv):
 
     baseLinks               = config['CONFIG']['baseLinks']
     shortcutExt             = config['CONFIG']['shortcutExt']
-    DOSBOXShortcut          = config['CONFIG']['DOSBOXshortcut']
-    createFiles             = config.getboolean('CONFIG','createFiles')
 
+    DOSBOXLocation          = config['DOSBOX']['DOSBOXLocation']
+    DOSBOXParameters        = config['DOSBOX']['DOSBOXParameters']
+    DOSBOXExecutable        = config['DOSBOX']['DOSBOXExecutable']
+
+    createFiles             = config.getboolean('FILES','createFiles')
     pathToSave              = config['FILES']['pathToSave']
     gamesFoundFileName      = config['FILES']['gamesFoundFileName']
     steamGamesOwnedFileName = config['FILES']['gamesOwnedFileName']
@@ -73,7 +76,7 @@ def run(argv):
     # Executing choosed game
     findLauncherAndStart(launchPrefixes, shortcutExt)
     findSteamGameAndLaunch(getownedgames(ownedGamesURL, apikey, steamid), playGameURL, chooseNotInstalled)
-    openDOSBOX(DOSBOXShortcut)
+    openDOSBOX(DOSBOXLocation, DOSBOXExecutable, DOSBOXParameters)
     executeEXE()
     fallBackToGameFolder()
  
