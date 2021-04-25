@@ -33,14 +33,17 @@ def writeTupleToFile(fileName, _tuple):
     
 def readConfigFile(argv):
     config = configparser.ConfigParser()
-    myopts, args = getopt.getopt(sys.argv[1:],"i:")
-    for opt, arg in myopts:
-        if opt == '-i':
-           if os.path.isfile(arg):
-              config.read(arg)
-           else:
-              config.read("choose_random_game.ini")
-        else:
-           config.read("choose_random_game.ini")
+    if (len(argv)>1):
+        myopts, args = getopt.getopt(sys.argv[1:],"i:")
+        for opt, arg in myopts:
+            if opt == '-i':
+               if os.path.isfile(arg):
+                  config.read(arg)
+               else:
+                  config.read("choose_random_game.ini")
+            else:
+               config.read("choose_random_game.ini")
+    else:
+        config.read("choose_random_game.ini")
     return config      
             
