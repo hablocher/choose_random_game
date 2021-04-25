@@ -8,7 +8,7 @@ from aesgard.steam     import get_steam_game_ids
 from aesgard.gameutil  import findLaunchAndStart
 from aesgard.gameutil  import findSteamGameAndLaunch
 from aesgard.gameutil  import openDOSBOX
-from aesgard.gameutil  import executeFirstEXE
+from aesgard.gameutil  import executeEXE
 from aesgard.gameutil  import prepareContent
 from aesgard.gameutil  import preparelinksList
 
@@ -71,13 +71,12 @@ def run():
     findLaunchAndStart(choosedGame, launchPrefixes, shortcutExt)
     findSteamGameAndLaunch(getownedgames(ownedGamesURL, apikey, steamid), choosedGame, playGameURL, chooseNotInstalled)
     openDOSBOX(choosedGame, DOSBOXShortcut)
-    executeFirstEXE(choosedGame)
+    executeEXE(choosedGame)
 
     # Fallback to opening the folder
     print("Opening folder '" + choosedGame + "'")
     os.startfile(choosedGame)
     sys.exit()
-    
    
 if __name__ == '__main__':
     run()

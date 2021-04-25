@@ -15,11 +15,9 @@ def normalizeString(text):
     return text.replace(" ","").replace(":","").replace("-","").replace("'","").replace(",","").replace("!","").replace("+","").replace("(","").replace(")","").lower()
 
 def checkExeFile(launch, choosed):
-    if jellyfish.levenshtein_distance(launch,  choosed) == 2: 
+    if jellyfish.levenshtein_distance(launch, choosed) == 2: 
         return True
-    if 'launcher.exe' in launch.lower():
-        return True
-    if not "unins" in launch.lower(): 
+    if 'launcher.exe' == launch:
         return True
     return False    
 
@@ -56,7 +54,21 @@ def openDOSBOX(choosedGame, DOSBOXShortcut):
         os.startfile(DOSBOXShortcut)
         sys.exit() 
 
-def executeFirstEXE(choosedGame):
+def executeEXE(choosedGame):
+    """
+    Execute EXE if the folder contains ONLY one EXE or
+    the EXE name is similar (levenshtein distance) to game name
+
+    Parameters
+    ----------
+    choosedGame : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    """
     posLastBar = choosedGame.rfind("/")
     exeCount = 0
     exeFolder = ""
