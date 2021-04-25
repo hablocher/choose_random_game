@@ -32,3 +32,5 @@ def getownedgames(url, apikey, steamid):
 def playgame(url, game):
     webbrowser.open(url.format(game['appid']))
     
+def playgameid(url, id):
+    webbrowser.open(url.format(id))

@@ -21,13 +21,17 @@ def run():
     steamUserName           = config['STEAM']['username']
     ownedGamesURL           = config['STEAM']['ownedGamesURL']
     playGameURL             = config['STEAM']['playGameURL']
+    chooseNotInstalled      = config.getboolean('STEAM','chooseNotInstalled')
+    steamGamesOwnedInfoURL  = config['STEAM']['gamesInfoURL']
+
     baseLinks               = config['CONFIG']['baseLinks']
     shortcutExt             = config['CONFIG']['shortcutExt']
     DOSBOXShortcut          = config['CONFIG']['DOSBOXshortcut']
+
     pathToSave              = config['FILES']['pathToSave']
     gamesFoundFileName      = config['FILES']['gamesFoundFileName']
     steamGamesOwnedFileName = config['FILES']['gamesOwnedFileName']
-    steamGamesOwnedInfoURL  = config['STEAM']['gamesInfoURL']
+
     gameFolders             = config.items("GAMEFOLDERS")
     foldersWithLinks        = config.items("FOLDERSWITHLINKS")
     gameCommonFolders       = config.items("GAMECOMMONFOLDERS")
@@ -40,9 +44,10 @@ def run():
             gameFolders, 
             gameCommonFolders, 
             steamGameFolders, 
-            preparelinksList(foldersWithLinks, baseLinks, removals))
-        ))
-    
+            preparelinksList(foldersWithLinks, baseLinks, removals),
+            get_steam_game_ids(steamGamesOwnedInfoURL, steamUserName).items(),
+            chooseNotInstalled)
+        ))    
     
     with open(pathToSave + gamesFoundFileName, 'w+', encoding="utf-8") as filehandle:  
         for listitem in content:
@@ -61,7 +66,7 @@ def run():
 
     # Executing
     findLaunchAndStart(choosedGame, launchPrefixes, shortcutExt)
-    findSteamGameAndLaunch(getownedgames(ownedGamesURL, apikey, steamid), choosedGame, playGameURL)
+    findSteamGameAndLaunch(getownedgames(ownedGamesURL, apikey, steamid), choosedGame, playGameURL, chooseNotInstalled)
     openDOSBOX(choosedGame, DOSBOXShortcut)
     executeFirstEXE(choosedGame)
 

@@ -9,6 +9,7 @@ import os
 import sys
 
 from aesgard.steam import playgame
+from aesgard.steam import playgameid
 
 def normalizeString(text):
     return text.replace(" ","").replace(":","").replace("-","").replace("'","").replace(",","").replace("!","").replace("+","").replace("(","").replace(")","").lower()
@@ -32,14 +33,22 @@ def findLaunchAndStart(choosedGame, launcherPrefixes, shortcutExt):
                    os.startfile(launch)
                    sys.exit() 
                    
-def findSteamGameAndLaunch(steamGames, choosedGame, playGameURL):
-   posLastBar = choosedGame.rfind("/")+1
-   for steamGame in steamGames:  
-        name = normalizeString(steamGame['name'])
-        choosed = normalizeString(choosedGame[posLastBar:])
-        if (name == choosed  or jellyfish.levenshtein_distance(name, choosed) == 2):
-           print("Calling STEAM app ID " + str(steamGame['appid']) + " (" + steamGame['name'] + ")")
-           playgame(playGameURL, steamGame)
+def findSteamGameAndLaunch(steamGames, choosedGame, playGameURL, chooseNotInstalled):
+   if not chooseNotInstalled:
+       posLastBar = choosedGame.rfind("/")+1
+       for steamGame in steamGames:  
+            name = normalizeString(steamGame['name'])
+            choosed = normalizeString(choosedGame[posLastBar:])
+            if (name == choosed  or jellyfish.levenshtein_distance(name, choosed) == 2):
+               print("Calling STEAM app ID " + str(steamGame['appid']) + " (" + steamGame['name'] + ")")
+               playgame(playGameURL, steamGame)
+               sys.exit() 
+   else:
+       if choosedGame.startswith("steam:"):
+           pos = choosedGame.rfind(":") + 1
+           print("Calling STEAM app ID " + choosedGame)
+           print(choosedGame[pos:])
+           playgameid(playGameURL, choosedGame[pos:])
            sys.exit() 
                    
 def openDOSBOX(choosedGame, DOSBOXShortcut):
@@ -48,7 +57,7 @@ def openDOSBOX(choosedGame, DOSBOXShortcut):
         sys.exit() 
 
 def executeFirstEXE(choosedGame):
-    posLastBar = choosedGame.rfind("/")+1
+    posLastBar = choosedGame.rfind("/")
     exeCount = 0
     exeFolder = ""
     exeFile = ""
@@ -81,7 +90,7 @@ def preparelinksList(foldersWithLinks, baseLinks, removals):
         linksList = [g.replace(removal, '') for g in linksList]
     return linksList
 
-def prepareContent(gameFolders, gameCommonFolders, steamGameFolders, linksList):
+def prepareContent(gameFolders, gameCommonFolders, steamGameFolders, linksList, steamOwnedGames, chooseNotInstalled):
     content = []
     for key, gameFolder in gameFolders:
         for key, common in gameCommonFolders:
@@ -90,10 +99,14 @@ def prepareContent(gameFolders, gameCommonFolders, steamGameFolders, linksList):
                 for game in next(os.walk(folder))[1]:
                     if game not in linksList:
                         content = content + [folder + game]
-    
-    for key, steamFolder in steamGameFolders:
-        if os.path.isdir(steamFolder):
-            content = content + [steamFolder + "/"+ s for s in next(os.walk(steamFolder))[1]]
+
+    if not chooseNotInstalled:
+        for key, steamFolder in steamGameFolders:
+            if os.path.isdir(steamFolder):
+               content = content + [steamFolder + "/"+ s for s in next(os.walk(steamFolder))[1]]
+    else:
+        content = content + ["steam:" + ":" + name + ":" + str(id) for id, name in steamOwnedGames]
+                
     return content
         
 
