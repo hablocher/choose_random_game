@@ -40,13 +40,14 @@ def run():
     launchPrefixes          = config.items("LAUCHERPREFIXES")    
     
     steamOwnedGames = get_steam_game_ids(steamGamesOwnedInfoURL, steamUserName).items();
+    linksList = preparelinksList(foldersWithLinks, baseLinks, removals)
     
     content = list(set(
         prepareContent(
             gameFolders, 
             gameCommonFolders, 
             steamGameFolders, 
-            preparelinksList(foldersWithLinks, baseLinks, removals),
+            linksList,
             steamOwnedGames,
             chooseNotInstalled)
         ))    
