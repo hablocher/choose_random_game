@@ -76,7 +76,6 @@ def run(argv):
     openDOSBOX(DOSBOXShortcut)
     executeEXE()
     fallBackToGameFolder()
-    
  
 if __name__ == '__main__':
     run(sys.argv)
