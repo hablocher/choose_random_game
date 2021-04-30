@@ -8,8 +8,9 @@ import jellyfish
 import os
 import sys
 
-from aesgard.steam import playgame
-from aesgard.steam import playgameid
+from aesgard.steam     import playgame
+from aesgard.steam     import playgameid
+from aesgard.database  import insertGameInfo
 
 def normalizeString(text):
     return text.replace(" ","").replace(":","").replace("-","").replace("'","").replace(",","").replace("!","").replace("+","").replace("(","").replace(")","").lower()
@@ -98,12 +99,12 @@ def preparelinksList(foldersWithLinks, baseLinks, removals):
     linksList = []
     for key, link in foldersWithLinks:
         if baseLinks:
-            linksList = linksList + [s for s in next(os.walk(baseLinks + link))[2]]
+            linksList = linksList + [s.lower() for s in next(os.walk(baseLinks + link))[2]]
         else:
-            linksList = linksList + [s for s in next(os.walk(link))[2]]
+            linksList = linksList + [s.lower() for s in next(os.walk(link))[2]]
     
     for key, removal in removals:
-        linksList = [g.replace(removal, '') for g in linksList]
+        linksList = [g.replace(removal.lower(), '') for g in linksList]
     return linksList
 
 def prepareContent(gameFolders, gameCommonFolders, steamGameFolders, linksList, steamOwnedGames, chooseNotInstalled):
@@ -114,12 +115,12 @@ def prepareContent(gameFolders, gameCommonFolders, steamGameFolders, linksList, 
             if os.path.isdir(folder):
                 for game in next(os.walk(folder))[1]:
                     if game not in linksList:
-                        content = content + [folder + game]
+                        content = content + [folder.lower() + game.lower()]
 
     if not chooseNotInstalled:
         for key, steamFolder in steamGameFolders:
             if os.path.isdir(steamFolder):
-               content = content + [steamFolder + "/"+ s for s in next(os.walk(steamFolder))[1]]
+               content = content + [steamFolder.lower() + "/"+ s.lower() for s in next(os.walk(steamFolder))[1]]
     else:
         content = content + ["steam:" + ":" + name + ":" + str(id) for id, name in steamOwnedGames]
                 
@@ -128,4 +129,6 @@ def prepareContent(gameFolders, gameCommonFolders, steamGameFolders, linksList, 
 def init(choosedgame):
     global __CHOOSEDGAME__
     __CHOOSEDGAME__ = choosedgame
+    insertGameInfo(__CHOOSEDGAME__)
+
  

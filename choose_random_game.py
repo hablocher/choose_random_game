@@ -1,6 +1,7 @@
 import random
 import sys
 
+
 from aesgard.steam     import getownedgames
 from aesgard.steam     import get_steam_game_ids
 from aesgard.gameutil  import init as gameUtilInit
@@ -14,6 +15,7 @@ from aesgard.gameutil  import fallBackToGameFolder
 from aesgard.util      import writeListToFile
 from aesgard.util      import writeTupleToFile
 from aesgard.util      import readConfigFile
+from aesgard.database  import init as databaseInit
 
 def run(argv):
     config = readConfigFile(argv)
@@ -45,6 +47,13 @@ def run(argv):
     removals                = config.items("REMOVALS")
     launchPrefixes          = config.items("LAUCHERPREFIXES")    
     
+    DatabaseServer          = config['DATABASE']['server']
+    DatabaseUser            = config['DATABASE']['user']
+    DatabasePassword        = config['DATABASE']['password']
+    DatabaseName            = config['DATABASE']['name']
+    
+    databaseInit(DatabaseServer, DatabaseUser, DatabasePassword, DatabaseName)
+    
     steamOwnedGames = get_steam_game_ids(steamGamesOwnedInfoURL, steamUserName).items();
 
     linksList = preparelinksList(foldersWithLinks, baseLinks, removals)
@@ -59,7 +68,7 @@ def run(argv):
             steamOwnedGames,
             chooseNotInstalled)
         ))    
-
+    
     # Writing files    
     if createFiles:
         writeListToFile(pathToSave + gamesFoundFileName, content)
