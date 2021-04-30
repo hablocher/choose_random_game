@@ -11,6 +11,7 @@ import sys
 from aesgard.steam     import playgame
 from aesgard.steam     import playgameid
 from aesgard.database  import insertGameInfo
+from aesgard.database  import findGameInfo
 
 def normalizeString(text):
     return text.replace(" ","").replace(":","").replace("-","").replace("'","").replace(",","").replace("!","").replace("+","").replace("(","").replace(")","").lower()
@@ -51,7 +52,7 @@ def findSteamGameAndLaunch(steamGames, playGameURL, chooseNotInstalled):
            sys.exit(0) 
                    
 def openDOSBOX(DOSBOXLocation, DOSBOXExecutable, DOSBOXParameters):
-    if "DOSBOX" in __CHOOSEDGAME__:
+    if "dosbox" in __CHOOSEDGAME__:
         posLastBar = __CHOOSEDGAME__.rfind("/")+1
         DOSBOXParameters = DOSBOXParameters.format('"cd ' + __CHOOSEDGAME__[posLastBar:] + '"')
         os.chdir(DOSBOXLocation)
@@ -125,6 +126,9 @@ def prepareContent(gameFolders, gameCommonFolders, steamGameFolders, linksList, 
         content = content + ["steam:" + ":" + name + ":" + str(id) for id, name in steamOwnedGames]
                 
     return content
+
+def gameHasBeenPlayed(choosedGame):
+    return findGameInfo(choosedGame)
 
 def init(choosedgame):
     global __CHOOSEDGAME__

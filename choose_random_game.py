@@ -12,6 +12,7 @@ from aesgard.gameutil  import executeEXE
 from aesgard.gameutil  import prepareContent
 from aesgard.gameutil  import preparelinksList
 from aesgard.gameutil  import fallBackToGameFolder
+from aesgard.gameutil  import gameHasBeenPlayed
 from aesgard.util      import writeListToFile
 from aesgard.util      import writeTupleToFile
 from aesgard.util      import readConfigFile
@@ -77,6 +78,8 @@ def run(argv):
     # Choosing game
     random.shuffle(content)
     choosedGame = random.choice(content)
+    while gameHasBeenPlayed(choosedGame):
+        choosedGame = random.choice(content)        
     gameUtilInit(choosedGame)
     
     print("You have " + str(len(content)) + " games to play!")
@@ -87,7 +90,7 @@ def run(argv):
     findSteamGameAndLaunch(getownedgames(ownedGamesURL, apikey, steamid), playGameURL, chooseNotInstalled)
     openDOSBOX(DOSBOXLocation, DOSBOXExecutable, DOSBOXParameters)
     executeEXE()
-    fallBackToGameFolder()
+    fallBackToGameFolder()    
  
 if __name__ == '__main__':
     run(sys.argv)

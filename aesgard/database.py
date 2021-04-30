@@ -7,15 +7,15 @@ Created on Fri Apr 30 00:29:48 2021
 import pymssql 
 
 sqlINSERT = """
-              INSERT INTO GamesChoosed (gameFolder, timesExecuted, lastTimePlayed) VALUES (%s, 1, CURRENT_TIMESTAMP)
+              INSERT INTO GamesChoosed (gameFolder, timesPlayed, lastTimePlayed) VALUES (%s, 1, CURRENT_TIMESTAMP)
             """
             
 sqlSELECT = """
-              SELECT * FROM GamesChoosed WHERE gameFolder = %s
+              SELECT * FROM GamesChoosed WHERE gameFolder = %s AND timesPlayed <= (SELECT MAX(timesPlayed) FROM GamesChoosed)
             """
 
 sqlUPDATE = """
-              UPDATE GamesChoosed SET timesExecuted = timesExecuted + 1 WHERE gameFolder = %s
+              UPDATE GamesChoosed SET timesPlayed = timesPlayed + 1 WHERE gameFolder = %s
             """
 
 
