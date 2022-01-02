@@ -149,7 +149,6 @@ def prepareContent(gameFolders, gameCommonFolders, steamGameFolders, linksList, 
             shortcut = shell.CreateShortCut(link[len(linkPrefix):])
             targetFolder = shortcut.Targetpath.lower().replace('\\','/')
             targetFolder = targetFolder[:targetFolder.rfind('/')]
-            print(targetFolder)
             if targetFolder not in content:
                 content = content + [link]
         else:
