@@ -7,11 +7,14 @@ Created on Sat Apr 24 18:56:44 2021
 import jellyfish
 import os
 import sys
+import win32com.client 
 
 from aesgard.steam     import playgame
 from aesgard.steam     import playgameid
 from aesgard.database  import insertGameInfo
 from aesgard.database  import findGameInfo
+
+linkPrefix = "link::"
 
 def normalizeString(text):
     return text.replace(" ","").replace(":","").replace("-","").replace("'","").replace(",","").replace("!","").replace("+","").replace("(","").replace(")","").lower()
@@ -32,6 +35,17 @@ def findLauncherAndStart(launcherPrefixes, shortcutExt):
                    os.chdir(__CHOOSEDGAME__)
                    os.startfile(launch)
                    sys.exit(0) 
+
+def startLink():
+    if (__CHOOSEDGAME__.startswith(linkPrefix)):
+        launch = __CHOOSEDGAME__[len(linkPrefix):]
+        print("Calling '" + launch + "'")
+        if (launch.endswith(".lnk") or launch.endswith(".url")):
+            os.startfile(launch)
+        else:
+            os.startfile(launch + ".url")
+        sys.exit(0) 
+
                    
 def findSteamGameAndLaunch(steamGames, playGameURL, chooseNotInstalled):
    if not chooseNotInstalled:
@@ -47,17 +61,29 @@ def findSteamGameAndLaunch(steamGames, playGameURL, chooseNotInstalled):
        if __CHOOSEDGAME__.startswith("steam:"):
            pos = __CHOOSEDGAME__.rfind(":") + 1
            print("Calling STEAM app ID " + __CHOOSEDGAME__)
-           print(__CHOOSEDGAME__[pos:])
            playgameid(playGameURL, __CHOOSEDGAME__[pos:])
            sys.exit(0) 
                    
 def openDOSBOX(DOSBOXLocation, DOSBOXExecutable, DOSBOXParameters):
     if "dosbox" in __CHOOSEDGAME__:
+        print("Executing DOXBOX Game '" + __CHOOSEDGAME__ + "'")
         posLastBar = __CHOOSEDGAME__.rfind("/")+1
         DOSBOXParameters = DOSBOXParameters.format('"cd ' + __CHOOSEDGAME__[posLastBar:] + '"')
         os.chdir(DOSBOXLocation)
         os.system(DOSBOXExecutable + " " + DOSBOXParameters)
         sys.exit(0) 
+
+def findeXoDOSGame(EXODOSLocation):
+    if "exodos" in __CHOOSEDGAME__:
+        posLastBar = __CHOOSEDGAME__.rfind("/")+1
+        gameLocation = EXODOSLocation + '/!dos/' + __CHOOSEDGAME__[posLastBar:]
+        os.chdir(gameLocation)
+        for file in os.listdir(gameLocation):
+            if (file.lower() != 'install.bat' and file.lower().endswith('.bat')):
+                file = '"' + file + '"'
+                print("Executing eXoDOS Game " + file )
+                os.startfile(file)
+                sys.exit(0) 
 
 def executeEXE():
     """
@@ -95,28 +121,39 @@ def fallBackToGameFolder():
     print("Opening folder '" + __CHOOSEDGAME__ + "'")
     os.startfile(__CHOOSEDGAME__)
     sys.exit(0)
-        
+    
 def preparelinksList(foldersWithLinks, baseLinks, removals):
     linksList = []
     for key, link in foldersWithLinks:
         if baseLinks:
-            linksList = linksList + [s.lower() for s in next(os.walk(baseLinks + link))[2]]
+            linksList = linksList + [linkPrefix + baseLinks + link + "/" + s.lower() for s in next(os.walk(baseLinks + link))[2]]
         else:
-            linksList = linksList + [s.lower() for s in next(os.walk(link))[2]]
+            linksList = linksList + [linkPrefix + link + "/" + s.lower() for s in next(os.walk(link))[2]]
     
     for key, removal in removals:
         linksList = [g.replace(removal.lower(), '') for g in linksList]
     return linksList
 
 def prepareContent(gameFolders, gameCommonFolders, steamGameFolders, linksList, steamOwnedGames, chooseNotInstalled):
+    shell = win32com.client.Dispatch("WScript.Shell")
     content = []
     for key, gameFolder in gameFolders:
         for key, common in gameCommonFolders:
             folder = str(gameFolder) + str(common)
             if os.path.isdir(folder):
                 for game in next(os.walk(folder))[1]:
-                    if game not in linksList:
-                        content = content + [folder.lower() + game.lower()]
+                    content = content + [folder.lower() + game.lower()]
+
+    for link in linksList:
+        if (link.endswith(".lnk")):
+            shortcut = shell.CreateShortCut(link[len(linkPrefix):])
+            targetFolder = shortcut.Targetpath.lower().replace('\\','/')
+            targetFolder = targetFolder[:targetFolder.rfind('/')]
+            print(targetFolder)
+            if targetFolder not in content:
+                content = content + [link]
+        else:
+            content = content + [link]
 
     if not chooseNotInstalled:
         for key, steamFolder in steamGameFolders:
@@ -134,5 +171,3 @@ def init(choosedgame):
     global __CHOOSEDGAME__
     __CHOOSEDGAME__ = choosedgame
     insertGameInfo(__CHOOSEDGAME__)
-
- 

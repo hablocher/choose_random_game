@@ -8,7 +8,9 @@ from aesgard.gameutil  import init as gameUtilInit
 from aesgard.gameutil  import findLauncherAndStart
 from aesgard.gameutil  import findSteamGameAndLaunch
 from aesgard.gameutil  import openDOSBOX
+from aesgard.gameutil  import findeXoDOSGame
 from aesgard.gameutil  import executeEXE
+from aesgard.gameutil  import startLink
 from aesgard.gameutil  import prepareContent
 from aesgard.gameutil  import preparelinksList
 from aesgard.gameutil  import fallBackToGameFolder
@@ -36,6 +38,8 @@ def run(argv):
     DOSBOXParameters        = config['DOSBOX']['DOSBOXParameters']
     DOSBOXExecutable        = config['DOSBOX']['DOSBOXExecutable']
 
+    EXODOSLocation          = config['EXODOS']['EXODOSLocation']
+
     createFiles             = config.getboolean('FILES','createFiles')
     pathToSave              = config['FILES']['pathToSave']
     gamesFoundFileName      = config['FILES']['gamesFoundFileName']
@@ -52,7 +56,7 @@ def run(argv):
     DatabaseUser            = config['DATABASE']['user']
     DatabasePassword        = config['DATABASE']['password']
     DatabaseName            = config['DATABASE']['name']
-    
+
     databaseInit(DatabaseServer, DatabaseUser, DatabasePassword, DatabaseName)
     
     steamOwnedGames = get_steam_game_ids(steamGamesOwnedInfoURL, steamUserName).items();
@@ -86,11 +90,17 @@ def run(argv):
     print("CHOOSED -----------> " + choosedGame + " <-----------")
 
     # Executing choosed game
-    findLauncherAndStart(launchPrefixes, shortcutExt)
-    findSteamGameAndLaunch(getownedgames(ownedGamesURL, apikey, steamid), playGameURL, chooseNotInstalled)
-    openDOSBOX(DOSBOXLocation, DOSBOXExecutable, DOSBOXParameters)
-    executeEXE()
-    fallBackToGameFolder()    
- 
+    try:
+        startLink()
+        findLauncherAndStart(launchPrefixes, shortcutExt)
+        findSteamGameAndLaunch(getownedgames(ownedGamesURL, apikey, steamid), playGameURL, chooseNotInstalled)
+        openDOSBOX(DOSBOXLocation, DOSBOXExecutable, DOSBOXParameters)
+        findeXoDOSGame(EXODOSLocation)
+        executeEXE()
+        fallBackToGameFolder()    
+    except Exception as e:
+        print("Can't start " + choosedGame + "(" + str(e) + ")")
+
+    
 if __name__ == '__main__':
     run(sys.argv)

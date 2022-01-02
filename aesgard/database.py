@@ -11,7 +11,7 @@ sqlINSERT = """
             """
             
 sqlSELECT = """
-              SELECT * FROM GamesChoosed WHERE gameFolder = %s AND timesPlayed <= (SELECT MAX(timesPlayed) FROM GamesChoosed)
+              SELECT * FROM GamesChoosed WHERE gameFolder = %s AND finished = 0 AND timesPlayed <= (SELECT MAX(timesPlayed) FROM GamesChoosed)
             """
 
 sqlUPDATE = """
