@@ -25,11 +25,9 @@ def run(argv):
     
     apikey                  = config['STEAM']['apikey']
     steamid                 = config['STEAM']['steamid']
-    steamUserName           = config['STEAM']['username']
     ownedGamesURL           = config['STEAM']['ownedGamesURL']
     playGameURL             = config['STEAM']['playGameURL']
     chooseNotInstalled      = config.getboolean('STEAM','chooseNotInstalled')
-    steamGamesOwnedInfoURL  = config['STEAM']['gamesInfoURL']
 
     baseLinks               = config['CONFIG']['baseLinks']
     shortcutExt             = config['CONFIG']['shortcutExt']
@@ -56,11 +54,16 @@ def run(argv):
     DatabaseUser            = config['DATABASE']['user']
     DatabasePassword        = config['DATABASE']['password']
     DatabaseName            = config['DATABASE']['name']
+    DatabaseType            = config['DATABASE']['type']
 
-    databaseInit(DatabaseServer, DatabaseUser, DatabasePassword, DatabaseName)
+    databaseInit(DatabaseServer, 
+                 DatabaseUser, 
+                 DatabasePassword, 
+                 DatabaseName, 
+                 DatabaseType)
     
-    steamOwnedGames = get_steam_game_ids(steamGamesOwnedInfoURL, steamUserName).items();
-
+    steamOwnedGames = getownedgames(ownedGamesURL, apikey, steamid)
+    steamGamesIds = get_steam_game_ids(steamOwnedGames).items();
     linksList = preparelinksList(foldersWithLinks, baseLinks, removals)
     
     # Create game list from all sources
@@ -70,14 +73,14 @@ def run(argv):
             gameCommonFolders, 
             steamGameFolders, 
             linksList,
-            steamOwnedGames,
+            steamGamesIds,
             chooseNotInstalled)
         ))    
     
     # Writing files    
     if createFiles:
         writeListToFile(pathToSave + gamesFoundFileName, content)
-        writeTupleToFile(pathToSave + steamGamesOwnedFileName, steamOwnedGames)
+        writeTupleToFile(pathToSave + steamGamesOwnedFileName, steamGamesIds)
 
     # Choosing game
     random.shuffle(content)
@@ -93,7 +96,7 @@ def run(argv):
     try:
         startLink()
         findLauncherAndStart(launchPrefixes, shortcutExt)
-        findSteamGameAndLaunch(getownedgames(ownedGamesURL, apikey, steamid), playGameURL, chooseNotInstalled)
+        findSteamGameAndLaunch(steamOwnedGames, playGameURL, chooseNotInstalled)
         openDOSBOX(DOSBOXLocation, DOSBOXExecutable, DOSBOXParameters)
         findeXoDOSGame(EXODOSLocation)
         executeEXE()

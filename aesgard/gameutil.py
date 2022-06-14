@@ -126,7 +126,7 @@ def preparelinksList(foldersWithLinks, baseLinks, removals):
     linksList = []
     for key, link in foldersWithLinks:
         if baseLinks:
-            linksList = linksList + [linkPrefix + baseLinks + link + "/" + s.lower() for s in next(os.walk(baseLinks + link))[2]]
+            linksList = linksList + [linkPrefix + baseLinks + link + "/" + s.lower() for s in next(os.walk(r'' + baseLinks + link))[2]]
         else:
             linksList = linksList + [linkPrefix + link + "/" + s.lower() for s in next(os.walk(link))[2]]
     
@@ -134,7 +134,12 @@ def preparelinksList(foldersWithLinks, baseLinks, removals):
         linksList = [g.replace(removal.lower(), '') for g in linksList]
     return linksList
 
-def prepareContent(gameFolders, gameCommonFolders, steamGameFolders, linksList, steamOwnedGames, chooseNotInstalled):
+def prepareContent(gameFolders, 
+                   gameCommonFolders, 
+                   steamGameFolders, 
+                   linksList, 
+                   steamGamesIds, 
+                   chooseNotInstalled):
     shell = win32com.client.Dispatch("WScript.Shell")
     content = []
     for key, gameFolder in gameFolders:
@@ -159,7 +164,7 @@ def prepareContent(gameFolders, gameCommonFolders, steamGameFolders, linksList, 
             if os.path.isdir(steamFolder):
                content = content + [steamFolder.lower() + "/"+ s.lower() for s in next(os.walk(steamFolder))[1]]
     else:
-        content = content + ["steam:" + ":" + name + ":" + str(id) for id, name in steamOwnedGames]
+        content = content + ["steam::" + name + ":" + str(id) for id, name in steamGamesIds]
                 
     return content
 

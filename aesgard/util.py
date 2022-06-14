@@ -40,10 +40,10 @@ def readConfigFile(argv):
                if os.path.isfile(arg):
                   config.read(arg)
                else:
-                  config.read("choose_random_game.ini")
+                  config.read("choose_random_game.ini", encoding='utf8')
             else:
-               config.read("choose_random_game.ini")
+               config.read("choose_random_game.ini", encoding='utf8')
     else:
-        config.read("choose_random_game.ini")
+        config.read("choose_random_game.ini", encoding='utf8')
     return config      
             
