@@ -6,6 +6,7 @@ Created on Fri Apr 30 00:29:48 2021
 """
 import pymssql  
 import pymysql
+from aesgard.util import LogException
 
 SERVER    = ""
 USER      = ""
@@ -30,26 +31,33 @@ sqlUPDATE = """
             """
 
 def insertGameInfo(choosedGame):
-    conn = opencon()
-    cursor = conn.cursor()
-    if not findGameInfo(choosedGame):
-        cursor.execute(sqlINSERT, (choosedGame))  
-    else:
-        cursor.execute(sqlUPDATE, (choosedGame))  
-    conn.commit()
-    cursor.close()
-    conn.close()
-    
+    try:
+        conn = opencon()
+        cursor = conn.cursor()
+        if not findGameInfo(choosedGame):
+            cursor.execute(sqlINSERT, (choosedGame))  
+        else:
+            cursor.execute(sqlUPDATE, (choosedGame))  
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        LogException("Database connection not available!", e)
+        return    
     
 def findGameInfo(choosedGame):
-    conn = opencon()
-    cursor = conn.cursor()
-    cursor.execute(sqlSELECT, (choosedGame))  
-    cursor.fetchall()
-    rowcount = cursor.rowcount
-    cursor.close()
-    conn.close()
-    return rowcount==1
+    try:
+        conn = opencon()
+        cursor = conn.cursor()
+        cursor.execute(sqlSELECT, (choosedGame))  
+        cursor.fetchall()
+        rowcount = cursor.rowcount
+        cursor.close()
+        conn.close()
+        return rowcount==1
+    except Exception as e:
+        LogException("Database connection not available!", e)
+        return False
 
 def init(server, user, password, database, dbtype):
     global SERVER   
@@ -62,6 +70,7 @@ def init(server, user, password, database, dbtype):
     PASSWORD = password
     DATABASE = database
     DBTYPE   = dbtype    
+
 def opencon():
     con = None
     if ("mysql"  == DBTYPE):

@@ -47,3 +47,9 @@ def readConfigFile(argv):
         config.read("choose_random_game.ini", encoding='utf8')
     return config      
             
+def LogException(message, e):
+    print(message)
+    if hasattr(e, 'message'):
+       print(e.message)
+    else:
+       print(e)

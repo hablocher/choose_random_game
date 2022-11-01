@@ -18,6 +18,7 @@ from aesgard.gameutil  import gameHasBeenPlayed
 from aesgard.util      import writeListToFile
 from aesgard.util      import writeTupleToFile
 from aesgard.util      import readConfigFile
+from aesgard.util      import LogException
 from aesgard.database  import init as databaseInit
 
 def run(argv):
@@ -62,8 +63,14 @@ def run(argv):
                  DatabaseName, 
                  DatabaseType)
     
-    steamOwnedGames = getownedgames(ownedGamesURL, apikey, steamid)
-    steamGamesIds = get_steam_game_ids(steamOwnedGames).items();
+    try:
+        steamOwnedGames = getownedgames(ownedGamesURL, apikey, steamid)
+        steamGamesIds = get_steam_game_ids(steamOwnedGames).items();
+    except Exception as e:
+        LogException("Steam API not available!", e)
+        steamOwnedGames = {}
+        steamGamesIds = {}
+        
     linksList = preparelinksList(foldersWithLinks, baseLinks, removals)
     
     # Create game list from all sources
