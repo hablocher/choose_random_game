@@ -7,6 +7,7 @@ Created on Fri Apr 30 00:29:48 2021
 import pymssql  
 import pymysql
 from aesgard.util import LogException
+from pythonping import ping
 
 SERVER    = ""
 USER      = ""
@@ -19,7 +20,7 @@ sqlINSERT = """
             """
             
 sqlSELECT = """
-              SELECT * FROM GamesChoosed WHERE gameFolder = %s AND finished = 0 AND timesPlayed <= (SELECT MAX(timesPlayed) FROM GamesChoosed)
+              SELECT * FROM GamesChoosed WHERE gameFolder = %s AND finished = 0 AND timesPlayed < (SELECT MAX(timesPlayed) FROM GamesChoosed)
             """
 
 #sqlSELECT = """
@@ -32,6 +33,10 @@ sqlUPDATE = """
 
 def insertGameInfo(choosedGame):
     try:
+        response = ping(SERVER)
+        if (not response.success()):
+            print("Database connection not available!")            
+            return
         conn = opencon()
         cursor = conn.cursor()
         if not findGameInfo(choosedGame):
@@ -47,6 +52,10 @@ def insertGameInfo(choosedGame):
     
 def findGameInfo(choosedGame):
     try:
+        response = ping(SERVER)
+        if (not response.success()):
+            print("Database connection not available!")            
+            return
         conn = opencon()
         cursor = conn.cursor()
         cursor.execute(sqlSELECT, (choosedGame))  
