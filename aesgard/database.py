@@ -35,10 +35,11 @@ sqlUPDATE = """
 def insertGameInfo(choosedGame):
     global DBTYPE   
     try:
-        response = ping(SERVER)
-        if (not response.success()):
-            print("Database connection not available! Switching to sqlite!")            
-            DBTYPE = "sqlite"
+        if (not "sqlite" == DBTYPE):
+            response = ping(SERVER)
+            if (not response.success()):
+                print("Database connection not available! Switching to sqlite!")            
+                DBTYPE = "sqlite"
         conn = opencon()
         cursor = conn.cursor()
         if not findGameInfo(choosedGame):
@@ -55,10 +56,11 @@ def insertGameInfo(choosedGame):
 def findGameInfo(choosedGame):
     global DBTYPE   
     try:
-        response = ping(SERVER)
-        if (not response.success()):
-            print("Database connection not available! Switching to sqlite!")            
-            DBTYPE = "sqlite"
+        if (not "sqlite" == DBTYPE):
+            response = ping(SERVER)
+            if (not response.success()):
+                print("Database connection not available! Switching to sqlite!")            
+                DBTYPE = "sqlite"
         conn = opencon()
         cursor = conn.cursor()
         cursor.execute(sqlSELECT.format(choosedGame))  
