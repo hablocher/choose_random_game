@@ -6,6 +6,7 @@ Created on Fri Apr 30 00:29:48 2021
 """
 import pymssql  
 import pymysql
+import sqlite3 as sl
 from aesgard.util import LogException
 from pythonping import ping
 
@@ -16,11 +17,11 @@ DATABASE  = ""
 DBTYPE    = ""
 
 sqlINSERT = """
-              INSERT INTO GamesChoosed (gameFolder, timesPlayed, lastTimePlayed) VALUES (%s, 1, CURRENT_TIMESTAMP)
+              INSERT INTO GamesChoosed (gameFolder, timesPlayed, lastTimePlayed) VALUES ('{}', 1, CURRENT_TIMESTAMP)
             """
             
 sqlSELECT = """
-              SELECT * FROM GamesChoosed WHERE gameFolder = %s AND finished = 0 AND timesPlayed < (SELECT MAX(timesPlayed) FROM GamesChoosed)
+              SELECT * FROM GamesChoosed WHERE gameFolder = '{}' AND finished = 0 AND timesPlayed < (SELECT MAX(timesPlayed) FROM GamesChoosed)
             """
 
 #sqlSELECT = """
@@ -28,21 +29,22 @@ sqlSELECT = """
 #            """
 
 sqlUPDATE = """
-              UPDATE GamesChoosed SET timesPlayed = timesPlayed + 1 WHERE gameFolder = %s
+              UPDATE GamesChoosed SET timesPlayed = timesPlayed + 1 WHERE gameFolder = '{}'
             """
 
 def insertGameInfo(choosedGame):
+    global DBTYPE   
     try:
         response = ping(SERVER)
         if (not response.success()):
-            print("Database connection not available!")            
-            return
+            print("Database connection not available! Switching to sqlite!")            
+            DBTYPE = "sqlite"
         conn = opencon()
         cursor = conn.cursor()
         if not findGameInfo(choosedGame):
-            cursor.execute(sqlINSERT, (choosedGame))  
+            cursor.execute(sqlINSERT.format(choosedGame))  
         else:
-            cursor.execute(sqlUPDATE, (choosedGame))  
+            cursor.execute(sqlUPDATE.format(choosedGame))  
         conn.commit()
         cursor.close()
         conn.close()
@@ -51,14 +53,15 @@ def insertGameInfo(choosedGame):
         return    
     
 def findGameInfo(choosedGame):
+    global DBTYPE   
     try:
         response = ping(SERVER)
         if (not response.success()):
-            print("Database connection not available!")            
-            return
+            print("Database connection not available! Switching to sqlite!")            
+            DBTYPE = "sqlite"
         conn = opencon()
         cursor = conn.cursor()
-        cursor.execute(sqlSELECT, (choosedGame))  
+        cursor.execute(sqlSELECT.format(choosedGame))  
         cursor.fetchall()
         rowcount = cursor.rowcount
         cursor.close()
@@ -88,9 +91,36 @@ def opencon():
                                password=PASSWORD,
                                database=DATABASE,
                                cursorclass=pymysql.cursors.DictCursor)
+
     if ("mssql"  == DBTYPE):
         con = pymssql.connect(server=SERVER, 
                                user=USER, 
                                password=PASSWORD, 
                                database=DATABASE)  
+
+    if ("sqlite" == DBTYPE):
+        con = sl.connect('Games.db')
+        if (not tablesExists(con)):
+            con.execute("""
+                CREATE TABLE GamesChoosed (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    gameFolder TEXT,
+                    timesPlayed INTEGER,
+                    lastTimePlayed DATETIME,
+                    finished INTEGER
+                );
+                """)
+                
     return con
+
+def tablesExists(con):
+    cursor = con.cursor()
+    try:
+        cursor.execute("SELECT COUNT(*) FROM GamesChoosed")
+        return True
+    except Exception:
+        return False
+    finally:
+        cursor.close()
+
+        

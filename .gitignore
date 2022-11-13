@@ -129,3 +129,4 @@ dmypy.json
 .pyre/
 
 /choose_random_game.ini
+/Games.db
