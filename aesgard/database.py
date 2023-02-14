@@ -35,6 +35,7 @@ sqlUPDATE = """
 def insertGameInfo(choosedGame):
     global DBTYPE   
     try:
+        choosedGame = choosedGame.replace("'","_")
         if (not "sqlite" == DBTYPE):
             response = ping(SERVER)
             if (not response.success()):
@@ -56,6 +57,7 @@ def insertGameInfo(choosedGame):
 def findGameInfo(choosedGame):
     global DBTYPE   
     try:
+        choosedGame = choosedGame.replace("'","_")
         if (not "sqlite" == DBTYPE):
             response = ping(SERVER)
             if (not response.success()):
