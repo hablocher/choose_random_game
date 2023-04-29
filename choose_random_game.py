@@ -1,9 +1,9 @@
 import random
 import sys
 
-
 from aesgard.steam     import getownedgames
 from aesgard.steam     import get_steam_game_ids
+from aesgard.gog       import getGOGGames
 from aesgard.gameutil  import init as gameUtilInit
 from aesgard.gameutil  import findLauncherAndStart
 from aesgard.gameutil  import findSteamGameAndLaunch
@@ -56,6 +56,8 @@ def run(argv):
     DatabasePassword        = config['DATABASE']['password']
     DatabaseName            = config['DATABASE']['name']
     DatabaseType            = config['DATABASE']['type']
+    
+    GOGDatabase             = config['GOG']['database']
 
     databaseInit(DatabaseServer, 
                  DatabaseUser, 
@@ -70,6 +72,8 @@ def run(argv):
         LogException("Steam API not available!", e)
         steamOwnedGames = {}
         steamGamesIds = {}
+        
+    gogGames = getGOGGames(GOGDatabase)
         
     linksList = preparelinksList(foldersWithLinks, baseLinks, removals)
     
@@ -89,8 +93,7 @@ def run(argv):
         writeListToFile(pathToSave + gamesFoundFileName, content)
         writeTupleToFile(pathToSave + steamGamesOwnedFileName, steamGamesIds)
 
-    # Choosing game
-    random.shuffle(content)
+    # Choosing random game
     choosedGame = random.choice(content)
     while gameHasBeenPlayed(choosedGame):
         choosedGame = random.choice(content)        

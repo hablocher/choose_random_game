@@ -155,7 +155,7 @@ def prepareContent(gameFolders,
             targetFolder = shortcut.Targetpath.lower().replace('\\','/')
             targetFolder = targetFolder[:targetFolder.rfind('/')]
             if targetFolder not in content:
-                content = content + [link]
+                content = content + [targetFolder]
         else:
             content = content + [link]
 

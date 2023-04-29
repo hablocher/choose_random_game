@@ -17,19 +17,19 @@ DATABASE  = ""
 DBTYPE    = ""
 
 sqlINSERT = """
-              INSERT INTO GamesChoosed (gameFolder, timesPlayed, lastTimePlayed) VALUES ('{}', 1, CURRENT_TIMESTAMP)
+              INSERT INTO GamesChoosed (gameName, timesPlayed, finished, lastTimePlayed) VALUES ('{}', 0, 0, CURRENT_TIMESTAMP)
             """
             
 sqlSELECT = """
-              SELECT * FROM GamesChoosed WHERE gameFolder = '{}' AND finished = 0 AND timesPlayed < (SELECT MAX(timesPlayed) FROM GamesChoosed)
+              SELECT * FROM GamesChoosed WHERE gameName = '{}' AND finished = 0 AND timesPlayed < (SELECT MAX(timesPlayed) FROM GamesChoosed)
             """
 
 #sqlSELECT = """
-#             SELECT TOP 1 * FROM GamesChoosed WHERE gameFolder = %s AND finished = 0 AND timesPlayed <= (SELECT MAX(timesPlayed) FROM GamesChoosed)ORDER BY NEWID()
+#             SELECT TOP 1 * FROM GamesChoosed WHERE gameName = %s AND finished = 0 AND timesPlayed <= (SELECT MAX(timesPlayed) FROM GamesChoosed)ORDER BY NEWID()
 #            """
 
 sqlUPDATE = """
-              UPDATE GamesChoosed SET timesPlayed = timesPlayed + 1 WHERE gameFolder = '{}'
+              UPDATE GamesChoosed SET timesPlayed = timesPlayed + 1, lastTimePlayed = CURRENT_TIMESTAMP WHERE gameName = '{}'
             """
 
 def insertGameInfo(choosedGame):
@@ -44,9 +44,10 @@ def insertGameInfo(choosedGame):
         conn = opencon()
         cursor = conn.cursor()
         if not findGameInfo(choosedGame):
-            cursor.execute(sqlINSERT.format(choosedGame))  
-        else:
-            cursor.execute(sqlUPDATE.format(choosedGame))  
+            sql = sqlINSERT.format(choosedGame)
+            cursor.execute(sql)
+        sql = sqlUPDATE.format(choosedGame)
+        cursor.execute(sql)  
         conn.commit()
         cursor.close()
         conn.close()
@@ -65,12 +66,13 @@ def findGameInfo(choosedGame):
                 DBTYPE = "sqlite"
         conn = opencon()
         cursor = conn.cursor()
-        cursor.execute(sqlSELECT.format(choosedGame))  
+        sql = sqlSELECT.format(choosedGame)
+        cursor.execute(sql)  
         cursor.fetchall()
         rowcount = cursor.rowcount
         cursor.close()
         conn.close()
-        return rowcount==1
+        return rowcount>0
     except Exception as e:
         LogException("Database connection not available!", e)
         return False
@@ -108,7 +110,7 @@ def opencon():
             con.execute("""
                 CREATE TABLE GamesChoosed (
                     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                    gameFolder TEXT,
+                    gameName TEXT,
                     timesPlayed INTEGER,
                     lastTimePlayed DATETIME,
                     finished INTEGER
