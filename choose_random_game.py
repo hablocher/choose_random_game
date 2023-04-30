@@ -49,6 +49,7 @@ def run(argv):
     gameCommonFolders       = config.items("GAMECOMMONFOLDERS")
     steamGameFolders        = config.items("STEAMGAMEFOLDERS")
     removals                = config.items("REMOVALS")
+    endswith                = config.items("ENDSWITH")
     launchPrefixes          = config.items("LAUCHERPREFIXES")    
     
     DatabaseServer          = config['DATABASE']['server']
@@ -75,7 +76,7 @@ def run(argv):
         
     gogGames = getGOGGames(GOGDatabase)
         
-    linksList = preparelinksList(foldersWithLinks, baseLinks, removals)
+    linksList = preparelinksList(foldersWithLinks, baseLinks)
     
     # Create game list from all sources
     content = list(set(
@@ -85,7 +86,9 @@ def run(argv):
             steamGameFolders, 
             linksList,
             steamGamesIds,
-            chooseNotInstalled)
+            chooseNotInstalled,
+            removals,
+            endswith)
         ))    
     
     # Writing files    

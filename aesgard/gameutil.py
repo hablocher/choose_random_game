@@ -122,16 +122,14 @@ def fallBackToGameFolder():
     os.startfile(__CHOOSEDGAME__)
     sys.exit(0)
     
-def preparelinksList(foldersWithLinks, baseLinks, removals):
+def preparelinksList(foldersWithLinks, baseLinks):
     linksList = []
     for key, link in foldersWithLinks:
         if baseLinks:
             linksList = linksList + [linkPrefix + baseLinks + link + "/" + s.lower() for s in next(os.walk(r'' + baseLinks + link))[2]]
         else:
             linksList = linksList + [linkPrefix + link + "/" + s.lower() for s in next(os.walk(link))[2]]
-    
-    for key, removal in removals:
-        linksList = [g.replace(removal.lower(), '') for g in linksList]
+
     return linksList
 
 def prepareContent(gameFolders, 
@@ -139,15 +137,21 @@ def prepareContent(gameFolders,
                    steamGameFolders, 
                    linksList, 
                    steamGamesIds, 
-                   chooseNotInstalled):
+                   chooseNotInstalled,
+                   removals,
+                   endswith):
     shell = win32com.client.Dispatch("WScript.Shell")
     content = []
+    ends = tuple(t[1].lower() for t in endswith)
+
     for key, gameFolder in gameFolders:
         for key, common in gameCommonFolders:
             folder = str(gameFolder) + str(common)
             if os.path.isdir(folder):
                 for game in next(os.walk(folder))[1]:
-                    content = content + [folder.lower() + game.lower()]
+                    g = folder.lower() + game.lower()
+                    if not g.endswith(ends):
+                        content = content + [g]
 
     for link in linksList:
         if (link.endswith(".lnk")):
@@ -166,6 +170,9 @@ def prepareContent(gameFolders,
     else:
         content = content + ["steam::" + name + ":" + str(id) for id, name in steamGamesIds]
                 
+    for key, removal in removals:
+        content = [g.replace(removal, '') for g in content]
+        
     return content
 
 def gameHasBeenPlayed(choosedGame):
