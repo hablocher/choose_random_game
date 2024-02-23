@@ -1,25 +1,17 @@
-import random
 import sys
 
 from aesgard.steam     import getownedgames
 from aesgard.steam     import get_steam_game_ids
 from aesgard.gog       import getGOGGames
-from aesgard.gameutil  import init as gameUtilInit
-from aesgard.gameutil  import findLauncherAndStart
-from aesgard.gameutil  import findSteamGameAndLaunch
-from aesgard.gameutil  import openDOSBOX
-from aesgard.gameutil  import findeXoDOSGame
-from aesgard.gameutil  import executeEXE
-from aesgard.gameutil  import startLink
 from aesgard.gameutil  import prepareContent
 from aesgard.gameutil  import preparelinksList
-from aesgard.gameutil  import fallBackToGameFolder
-from aesgard.gameutil  import gameHasBeenPlayed
+from aesgard.gameutil  import chooseGame
 from aesgard.util      import writeListToFile
 from aesgard.util      import writeTupleToFile
 from aesgard.util      import readConfigFile
 from aesgard.util      import LogException
 from aesgard.database  import init as databaseInit
+from aesgard.ui        import showChoosedGame
 
 def run(argv):
     config = readConfigFile(argv)
@@ -27,17 +19,10 @@ def run(argv):
     apikey                  = config['STEAM']['apikey']
     steamid                 = config['STEAM']['steamid']
     ownedGamesURL           = config['STEAM']['ownedGamesURL']
-    playGameURL             = config['STEAM']['playGameURL']
     chooseNotInstalled      = config.getboolean('STEAM','chooseNotInstalled')
 
     baseLinks               = config['CONFIG']['baseLinks']
-    shortcutExt             = config['CONFIG']['shortcutExt']
-
-    DOSBOXLocation          = config['DOSBOX']['DOSBOXLocation']
-    DOSBOXParameters        = config['DOSBOX']['DOSBOXParameters']
-    DOSBOXExecutable        = config['DOSBOX']['DOSBOXExecutable']
-
-    EXODOSLocation          = config['EXODOS']['EXODOSLocation']
+    onlyFavorites           = config['CONFIG']['onlyFavorites']
 
     createFiles             = config.getboolean('FILES','createFiles')
     pathToSave              = config['FILES']['pathToSave']
@@ -50,7 +35,6 @@ def run(argv):
     steamGameFolders        = config.items("STEAMGAMEFOLDERS")
     removals                = config.items("REMOVALS")
     endswith                = config.items("ENDSWITH")
-    launchPrefixes          = config.items("LAUCHERPREFIXES")    
     
     DatabaseServer          = config['DATABASE']['server']
     DatabaseUser            = config['DATABASE']['user']
@@ -96,27 +80,11 @@ def run(argv):
         writeListToFile(pathToSave + gamesFoundFileName, content)
         writeTupleToFile(pathToSave + steamGamesOwnedFileName, steamGamesIds)
 
-    # Choosing random game
-    choosedGame = random.choice(content)
-    while gameHasBeenPlayed(choosedGame):
-        choosedGame = random.choice(content)        
-    gameUtilInit(choosedGame)
-    
+    choosedGame = chooseGame(content)
+        
     print("You have " + str(len(content)) + " games to play!")
     print("CHOOSED -----------> " + choosedGame + " <-----------")
+    showChoosedGame(choosedGame, steamOwnedGames, config)
 
-    # Executing choosed game
-    try:
-        startLink()
-        findLauncherAndStart(launchPrefixes, shortcutExt)
-        findSteamGameAndLaunch(steamOwnedGames, playGameURL, chooseNotInstalled)
-        openDOSBOX(DOSBOXLocation, DOSBOXExecutable, DOSBOXParameters)
-        findeXoDOSGame(EXODOSLocation)
-        executeEXE()
-        fallBackToGameFolder()    
-    except Exception as e:
-        print("Can't start " + choosedGame + "(" + str(e) + ")")
-
-    
 if __name__ == '__main__':
     run(sys.argv)

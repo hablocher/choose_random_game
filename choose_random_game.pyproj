@@ -1,0 +1,48 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{848b1129-1a75-4173-b09f-ba647cb7eda6}</ProjectGuid>
+    <ProjectHome />
+    <StartupFile>choose_random_game.py</StartupFile>
+    <SearchPath />
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <InterpreterId />
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <PropertyGroup>
+    <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include=".spyproject\config\codestyle.ini" />
+    <Content Include=".spyproject\config\defaults\defaults-codestyle-0.2.0.ini" />
+    <Content Include=".spyproject\config\defaults\defaults-encoding-0.2.0.ini" />
+    <Content Include=".spyproject\config\defaults\defaults-vcs-0.2.0.ini" />
+    <Content Include=".spyproject\config\defaults\defaults-workspace-0.2.0.ini" />
+    <Content Include=".spyproject\config\encoding.ini" />
+    <Content Include=".spyproject\config\vcs.ini" />
+    <Content Include=".spyproject\config\workspace.ini" />
+    <Content Include="choose_random_game.ini" />
+    <Content Include="sample-choose_random_game.ini" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="aesgard\database.py" />
+    <Compile Include="aesgard\gameutil.py" />
+    <Compile Include="aesgard\gog.py" />
+    <Compile Include="aesgard\steam.py" />
+    <Compile Include="aesgard\util.py" />
+    <Compile Include="choose_random_game.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include=".spyproject\" />
+    <Folder Include=".spyproject\config" />
+    <Folder Include=".spyproject\config\defaults" />
+    <Folder Include="aesgard" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+</Project>

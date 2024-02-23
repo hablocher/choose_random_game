@@ -4,10 +4,16 @@ Created on Sat Apr 24 18:56:44 2021
 
 @author: Marcelo
 """
+import random
 import jellyfish
 import os
 import sys
+import io
 import win32com.client 
+
+from PIL import Image
+import requests
+from io import BytesIO
 
 from aesgard.steam     import playgame
 from aesgard.steam     import playgameid
@@ -63,7 +69,21 @@ def findSteamGameAndLaunch(steamGames, playGameURL, chooseNotInstalled):
            print("Calling STEAM app ID " + __CHOOSEDGAME__)
            playgameid(playGameURL, __CHOOSEDGAME__[pos:])
            sys.exit(0) 
-                   
+
+def findSteamGameImage(steamGames, imageGameURL, choosedGame):
+       image = Image.new("RGB", (200, 200), (255, 255, 255))
+       if choosedGame.startswith("steam:"):
+           begin = choosedGame.find("::") + 2
+           end   = choosedGame.rfind(":")
+           choosedGame = choosedGame[begin:end]
+           for steamGame in steamGames:  
+               if (steamGame['name'] == choosedGame):
+                   url = imageGameURL.format(steamGame['appid'], steamGame['img_icon_url'])
+                   response = requests.get(url)
+                   image = Image.open(BytesIO(response.content))
+                   break
+       return image
+               
 def openDOSBOX(DOSBOXLocation, DOSBOXExecutable, DOSBOXParameters):
     if "dosbox" in __CHOOSEDGAME__:
         print("Executing DOXBOX Game '" + __CHOOSEDGAME__ + "'")
@@ -176,9 +196,41 @@ def prepareContent(gameFolders,
     return content
 
 def gameHasBeenPlayed(choosedGame):
-    return findGameInfo(choosedGame)
+    return findGameInfo(choosedGame) != None
 
 def init(choosedgame):
     global __CHOOSEDGAME__
     __CHOOSEDGAME__ = choosedgame
     insertGameInfo(__CHOOSEDGAME__)
+    
+def executeGame(choosedGame, steamOwnedGames, config):
+    launchPrefixes          = config.items("LAUCHERPREFIXES")    
+    shortcutExt             = config['CONFIG']['shortcutExt']
+    playGameURL             = config['STEAM']['playGameURL']
+    chooseNotInstalled      = config.getboolean('STEAM','chooseNotInstalled')
+    DOSBOXLocation          = config['DOSBOX']['DOSBOXLocation']
+    DOSBOXParameters        = config['DOSBOX']['DOSBOXParameters']
+    DOSBOXExecutable        = config['DOSBOX']['DOSBOXExecutable']
+    EXODOSLocation          = config['EXODOS']['EXODOSLocation']
+    # Executing choosed game
+    try:
+        init(choosedGame)
+        startLink()
+        findLauncherAndStart(launchPrefixes, shortcutExt)
+        findSteamGameAndLaunch(steamOwnedGames, playGameURL, chooseNotInstalled)
+        openDOSBOX(DOSBOXLocation, DOSBOXExecutable, DOSBOXParameters)
+        findeXoDOSGame(EXODOSLocation)
+        executeEXE()
+        fallBackToGameFolder()    
+    except Exception as e:
+        print("Can't start " + choosedGame + "(" + str(e) + ")")
+    
+# Choosing random game
+def chooseGame(content):
+    choosedGame = random.choice(content)
+    for x in range(len(content)):
+        if gameHasBeenPlayed(choosedGame):
+            choosedGame = random.choice(content)     
+        else:
+            break
+    return choosedGame

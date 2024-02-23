@@ -16,16 +16,26 @@ PASSWORD  = ""
 DATABASE  = ""
 DBTYPE    = ""
 
+FIELD_ID             = 0
+FIELD_GAMENAME       = 1
+FIELD_TIMESPLAYED    = 2
+FIELD_LASTTIMEPLAYED = 3
+FIELD_FINISHED       = 4
+FIELD_FAVORITE       = 5
+
 sqlINSERT = """
-              INSERT INTO GamesChoosed (gameName, timesPlayed, finished, lastTimePlayed) VALUES ('{}', 0, 0, CURRENT_TIMESTAMP)
+              INSERT INTO GamesChoosed (gameName, timesPlayed, finished, lastTimePlayed, favorite) VALUES ('{}', 0, 0, CURRENT_TIMESTAMP, 0)
             """
             
 sqlSELECT = """
-              SELECT * FROM GamesChoosed WHERE gameName = '{}' AND finished = 0 AND timesPlayed < (SELECT MAX(timesPlayed) FROM GamesChoosed)
+              SELECT * FROM GamesChoosed 
+               WHERE gameName = '{}' 
+                 AND finished = 0 
+                 AND timesPlayed <= (SELECT MAX(timesPlayed) FROM GamesChoosed)
             """
 
 #sqlSELECT = """
-#             SELECT TOP 1 * FROM GamesChoosed WHERE gameName = %s AND finished = 0 AND timesPlayed <= (SELECT MAX(timesPlayed) FROM GamesChoosed)ORDER BY NEWID()
+#             SELECT TOP 1 * FROM GamesChoosed WHERE gameName = %s AND finished = 0 AND timesPlayed <= (SELECT MAX(timesPlayed) FROM GamesChoosed) ORDER BY NEWID()
 #            """
 
 sqlUPDATE = """
@@ -43,9 +53,10 @@ def insertGameInfo(choosedGame):
                 DBTYPE = "sqlite"
         conn = opencon()
         cursor = conn.cursor()
-        if not findGameInfo(choosedGame):
-            sql = sqlINSERT.format(choosedGame)
-            cursor.execute(sql)
+        id = findGameInfo(choosedGame)
+        if id == None:
+           sql = sqlINSERT.format(choosedGame)
+           cursor.execute(sql)
         sql = sqlUPDATE.format(choosedGame)
         cursor.execute(sql)  
         conn.commit()
@@ -68,14 +79,16 @@ def findGameInfo(choosedGame):
         cursor = conn.cursor()
         sql = sqlSELECT.format(choosedGame)
         cursor.execute(sql)  
-        cursor.fetchall()
-        rowcount = cursor.rowcount
+        row = cursor.fetchone()
+        if row == None:
+            return None
+        id = row[FIELD_ID]
         cursor.close()
         conn.close()
-        return rowcount>0
+        return id
     except Exception as e:
         LogException("Database connection not available!", e)
-        return False
+        return None
 
 def init(server, user, password, database, dbtype):
     global SERVER   
@@ -113,7 +126,8 @@ def opencon():
                     gameName TEXT,
                     timesPlayed INTEGER,
                     lastTimePlayed DATETIME,
-                    finished INTEGER
+                    finished INTEGER,
+                    favorite INTEGER
                 );
                 """)
                 
