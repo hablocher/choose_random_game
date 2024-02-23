@@ -8,7 +8,6 @@ import random
 import jellyfish
 import os
 import sys
-import io
 import win32com.client 
 
 from PIL import Image
@@ -19,8 +18,13 @@ from aesgard.steam     import playgame
 from aesgard.steam     import playgameid
 from aesgard.database  import insertGameInfo
 from aesgard.database  import findGameInfo
+from aesgard.config    import Config
+from aesgard.winicon   import extract_icon, IconSize
+from aesgard.util      import win32_icon_to_image
+from aesgard.util      import LogException
 
 linkPrefix = "link::"
+steamPrefix = "steam:"
 
 def normalizeString(text):
     return text.replace(" ","").replace(":","").replace("-","").replace("'","").replace(",","").replace("!","").replace("+","").replace("(","").replace(")","").lower()
@@ -33,14 +37,20 @@ def checkExeFile(launch, choosed):
     return False    
 
 def findLauncherAndStart(launcherPrefixes, shortcutExt):
-    if os.path.isdir(__CHOOSEDGAME__):
-        for launch in next(os.walk(__CHOOSEDGAME__))[2]:
+    launch = findLauncher(__CHOOSEDGAME__, launcherPrefixes, shortcutExt)
+    if  launch != None:
+        print("Calling '" + launch + "'")
+        os.chdir(__CHOOSEDGAME__)
+        os.startfile(launch)
+        sys.exit(0) 
+                   
+def findLauncher(choosedGame, launcherPrefixes, shortcutExt):
+    if os.path.isdir(choosedGame):
+        for launch in next(os.walk(choosedGame))[2]:
             for key, prefix in launcherPrefixes:
                 if (launch.lower().startswith(prefix.lower()) and launch.lower().endswith(shortcutExt)): 
-                   print("Calling '" + launch + "'")
-                   os.chdir(__CHOOSEDGAME__)
-                   os.startfile(launch)
-                   sys.exit(0) 
+                    return launch
+    return None
 
 def startLink():
     if (__CHOOSEDGAME__.startswith(linkPrefix)):
@@ -64,24 +74,42 @@ def findSteamGameAndLaunch(steamGames, playGameURL, chooseNotInstalled):
                playgame(playGameURL, steamGame)
                sys.exit(0) 
    else:
-       if __CHOOSEDGAME__.startswith("steam:"):
+       if __CHOOSEDGAME__.startswith(steamPrefix):
            pos = __CHOOSEDGAME__.rfind(":") + 1
            print("Calling STEAM app ID " + __CHOOSEDGAME__)
            playgameid(playGameURL, __CHOOSEDGAME__[pos:])
            sys.exit(0) 
 
-def findSteamGameImage(steamGames, imageGameURL, choosedGame):
-       image = Image.new("RGB", (200, 200), (255, 255, 255))
-       if choosedGame.startswith("steam:"):
-           begin = choosedGame.find("::") + 2
+def findGameIcon(steamGames, imageGameURL, choosedGame):
+       conf = Config()
+       conf.read_config(None)
+       image = Image.new("RGB", (128, 128), (255, 255, 255))
+       if choosedGame.startswith(steamPrefix):
+           begin = choosedGame.find(":") + 1
            end   = choosedGame.rfind(":")
            choosedGame = choosedGame[begin:end]
            for steamGame in steamGames:  
                if (steamGame['name'] == choosedGame):
-                   url = imageGameURL.format(steamGame['appid'], steamGame['img_icon_url'])
+                   url = imageGameURL.format(steamGame['appid'])#, steamGame['img_icon_url'])
                    response = requests.get(url)
                    image = Image.open(BytesIO(response.content))
                    break
+       else:
+            if 'exodos' in choosedGame:
+                response = requests.get(conf.EXODOSImageURL)
+                return Image.open(BytesIO(response.content))
+            try:
+                shell = win32com.client.Dispatch("WScript.Shell")
+                launch = findLauncher(choosedGame, conf.launcherPrefixes, conf.shortcutExt)
+                if launch != None:
+                    shortcut = shell.CreateShortcut(choosedGame + '/' + launch)
+                    return win32_icon_to_image(extract_icon(shortcut.Targetpath, IconSize.LARGE), IconSize.LARGE).resize((128, 128))
+                exeFile = findEXE(choosedGame)
+                if exeFile != None:
+                    return win32_icon_to_image(extract_icon(exeFile[0], IconSize.LARGE), IconSize.LARGE).resize((128, 128))
+            except WindowsError as we:
+                LogException("Error reading ICON image from EXE!", we)
+                return image
        return image
                
 def openDOSBOX(DOSBOXLocation, DOSBOXExecutable, DOSBOXParameters):
@@ -115,26 +143,30 @@ def executeEXE():
     None.
 
     """
-    posLastBar = __CHOOSEDGAME__.rfind("/")
+    exeInfo = findEXE(__CHOOSEDGAME__)
+    if exeInfo != None:
+        os.chdir(exeInfo[1])
+        os.startfile(exeInfo[0])
+        sys.exit(0) 
+
+def findEXE(choosedGame):
+    posLastBar = choosedGame.rfind("/")
     exeCount = 0
     exeFolder = ""
     exeFile = ""
-    for launch in next(os.walk(__CHOOSEDGAME__))[2]:
+    for launch in next(os.walk(choosedGame))[2]:
         if launch.lower().endswith('.exe'):
             exeCount += 1
-            exeFolder = __CHOOSEDGAME__
+            exeFolder = choosedGame
             exeFile = launch
-            if checkExeFile(launch.lower(), __CHOOSEDGAME__[posLastBar:].lower()):
+            if checkExeFile(exeFile.lower(), choosedGame[posLastBar:].lower()):
                 print("Calling EXE '" + launch + "'")
-                os.chdir(__CHOOSEDGAME__)
-                os.startfile(launch)
-                sys.exit(0) 
-               
+                return (exeFile, exeFolder)           
     if (exeCount == 1):
-        print("Calling EXE '" + exeFile + "'")
-        os.chdir(exeFolder)
-        os.startfile(exeFile)
-        sys.exit(0) 
+        if not 'uninst' in exeFile:
+            print("Calling EXE '" + exeFile + "'")
+            return (exeFile, exeFolder)
+    return None
 
 def fallBackToGameFolder():
     # Fallback and open the game folder
@@ -188,7 +220,7 @@ def prepareContent(gameFolders,
             if os.path.isdir(steamFolder):
                content = content + [steamFolder.lower() + "/"+ s.lower() for s in next(os.walk(steamFolder))[1]]
     else:
-        content = content + ["steam::" + name + ":" + str(id) for id, name in steamGamesIds]
+        content = content + [steamPrefix + name + ":" + str(id) for id, name in steamGamesIds]
                 
     for key, removal in removals:
         content = [g.replace(removal, '') for g in content]
@@ -203,23 +235,17 @@ def init(choosedgame):
     __CHOOSEDGAME__ = choosedgame
     insertGameInfo(__CHOOSEDGAME__)
     
-def executeGame(choosedGame, steamOwnedGames, config):
-    launchPrefixes          = config.items("LAUCHERPREFIXES")    
-    shortcutExt             = config['CONFIG']['shortcutExt']
-    playGameURL             = config['STEAM']['playGameURL']
-    chooseNotInstalled      = config.getboolean('STEAM','chooseNotInstalled')
-    DOSBOXLocation          = config['DOSBOX']['DOSBOXLocation']
-    DOSBOXParameters        = config['DOSBOX']['DOSBOXParameters']
-    DOSBOXExecutable        = config['DOSBOX']['DOSBOXExecutable']
-    EXODOSLocation          = config['EXODOS']['EXODOSLocation']
+def executeGame(choosedGame, steamOwnedGames):
+    conf = Config()
+    conf.read_config(None)
     # Executing choosed game
     try:
         init(choosedGame)
         startLink()
-        findLauncherAndStart(launchPrefixes, shortcutExt)
-        findSteamGameAndLaunch(steamOwnedGames, playGameURL, chooseNotInstalled)
-        openDOSBOX(DOSBOXLocation, DOSBOXExecutable, DOSBOXParameters)
-        findeXoDOSGame(EXODOSLocation)
+        findLauncherAndStart(conf.launcherPrefixes, conf.shortcutExt)
+        findSteamGameAndLaunch(steamOwnedGames, conf.playGameURL, conf.chooseNotInstalled)
+        findeXoDOSGame(conf.EXODOSLocation)
+        openDOSBOX(conf.DOSBOXLocation, conf.DOSBOXExecutable, conf.DOSBOXParameters)
         executeEXE()
         fallBackToGameFolder()    
     except Exception as e:

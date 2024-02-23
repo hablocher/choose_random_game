@@ -10,6 +10,11 @@ import getopt
 import os
 import sys
 
+from ctypes import Array, c_char
+from PIL import Image
+
+from aesgard.winicon import IconSize
+
 ##  Styles:
 ##  0 : OK
 ##  1 : OK | Cancel
@@ -33,7 +38,7 @@ def writeTupleToFile(fileName, _tuple):
     
 def readConfigFile(argv):
     config = configparser.ConfigParser()
-    if (len(argv)>1):
+    if (argv != None and len(argv)>1):
         myopts, args = getopt.getopt(sys.argv[1:],"i:")
         for opt, arg in myopts:
             if opt == '-i':
@@ -53,3 +58,11 @@ def LogException(message, e):
        print(e.message)
     else:
        print(e)
+
+def win32_icon_to_image(icon_bits: Array[c_char], size: IconSize) -> Image:
+    """
+    Convert a Windows GDI bitmap to a PIL `Image` instance.
+    """
+    w, h = IconSize.to_wh(size)
+    img = Image.frombytes("RGBA", (w, h), icon_bits, "raw", "BGRA")
+    return img
