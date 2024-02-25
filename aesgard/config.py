@@ -21,6 +21,7 @@ class Config:
         self.baseLinks               = self.config['CONFIG']['baseLinks']
         self.onlyFavorites           = self.config['CONFIG']['onlyFavorites']
         self.shortcutExt             = self.config['CONFIG']['shortcutExt']
+        self.importContentToDatabase = self.config.getboolean('CONFIG','importContentToDatabase')
     
         self.createFiles             = self.config.getboolean('FILES','createFiles')
         self.pathToSave              = self.config['FILES']['pathToSave']
@@ -42,7 +43,8 @@ class Config:
         
         self.GOGDatabase             = self.config['GOG']['database']
 
-        self.launcherPrefixes          = self.config.items("LAUNCHERPREFIXES")    
+        self.launcherPrefixes        = self.config.items("LAUNCHERPREFIXES")    
+        self.otherClients            = self.config.items("OTHERCLIENTS")    
 
         self.DOSBOXLocation          = self.config['DOSBOX']['DOSBOXLocation']
         self.DOSBOXParameters        = self.config['DOSBOX']['DOSBOXParameters']

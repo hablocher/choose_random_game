@@ -18,13 +18,16 @@ from aesgard.steam     import playgame
 from aesgard.steam     import playgameid
 from aesgard.database  import insertGameInfo
 from aesgard.database  import findGameInfo
-from aesgard.config    import Config
 from aesgard.winicon   import extract_icon, IconSize
 from aesgard.util      import win32_icon_to_image
 from aesgard.util      import LogException
+from aesgard.config    import Config
 
 linkPrefix = "link::"
 steamPrefix = "steam:"
+
+__CONFIG__ = Config()
+__CONFIG__.read_config(sys.argv)
 
 def normalizeString(text):
     return text.replace(" ","").replace(":","").replace("-","").replace("'","").replace(",","").replace("!","").replace("+","").replace("(","").replace(")","").lower()
@@ -53,15 +56,28 @@ def findLauncher(choosedGame, launcherPrefixes, shortcutExt):
     return None
 
 def startLink():
-    if (__CHOOSEDGAME__.startswith(linkPrefix)):
-        launch = __CHOOSEDGAME__[len(linkPrefix):]
-        print("Calling '" + launch + "'")
-        if (launch.endswith(".lnk") or launch.endswith(".url")):
-            os.startfile(launch)
-        else:
-            os.startfile(launch + ".url")
-        sys.exit(0) 
-
+    url = findClientURL(__CHOOSEDGAME__)
+    if url != None:
+       os.startfile(url)
+       sys.exit(0) 
+        
+def findClientURL(choosedGame):
+    if (choosedGame.startswith(linkPrefix)):
+        launch = choosedGame[len(linkPrefix):]
+        if (launch.endswith(__CONFIG__.shortcutExt) or launch.endswith(".url")):
+            return launch
+        shell = win32com.client.Dispatch("WScript.Shell")
+        linkFile = launch + __CONFIG__.shortcutExt
+        shortcut = shell.CreateShortcut(linkFile)
+        for key, client in __CONFIG__.otherClients:
+            if (shortcut.Targetpath.startswith(client)):
+                return shortcut.Targetpath
+        linkFile = launch + ".url"
+        shortcut = shell.CreateShortcut(linkFile)
+        for key, client in __CONFIG__.otherClients:
+            if (shortcut.Targetpath.startswith(client)):
+                return shortcut.Targetpath
+    return None
                    
 def findSteamGameAndLaunch(steamGames, playGameURL, chooseNotInstalled):
    if not chooseNotInstalled:
@@ -81,36 +97,35 @@ def findSteamGameAndLaunch(steamGames, playGameURL, chooseNotInstalled):
            sys.exit(0) 
 
 def findGameIcon(steamGames, imageGameURL, choosedGame):
-       conf = Config()
-       conf.read_config(None)
-       image = Image.new("RGB", (128, 128), (255, 255, 255))
-       if choosedGame.startswith(steamPrefix):
-           begin = choosedGame.find(":") + 1
-           end   = choosedGame.rfind(":")
-           choosedGame = choosedGame[begin:end]
-           for steamGame in steamGames:  
-               if (steamGame['name'] == choosedGame):
-                   url = imageGameURL.format(steamGame['appid'])#, steamGame['img_icon_url'])
-                   response = requests.get(url)
-                   image = Image.open(BytesIO(response.content))
-                   break
-       else:
-            if 'exodos' in choosedGame:
-                response = requests.get(conf.EXODOSImageURL)
-                return Image.open(BytesIO(response.content))
-            try:
-                shell = win32com.client.Dispatch("WScript.Shell")
-                launch = findLauncher(choosedGame, conf.launcherPrefixes, conf.shortcutExt)
-                if launch != None:
-                    shortcut = shell.CreateShortcut(choosedGame + '/' + launch)
-                    return win32_icon_to_image(extract_icon(shortcut.Targetpath, IconSize.LARGE), IconSize.LARGE).resize((128, 128))
-                exeFile = findEXE(choosedGame)
-                if exeFile != None:
-                    return win32_icon_to_image(extract_icon(exeFile[0], IconSize.LARGE), IconSize.LARGE).resize((128, 128))
-            except WindowsError as we:
-                LogException("Error reading ICON image from EXE!", we)
-                return image
-       return image
+    global __CONFIG__   
+    image = Image.new("RGB", (128, 128), (255, 255, 255))
+    if choosedGame.startswith(steamPrefix):
+        begin = choosedGame.find(":") + 1
+        end   = choosedGame.rfind(":")
+        choosedGame = choosedGame[begin:end]
+        for steamGame in steamGames:  
+            if (steamGame['name'] == choosedGame):
+                url = imageGameURL.format(steamGame['appid'])#, steamGame['img_icon_url'])
+                response = requests.get(url)
+                image = Image.open(BytesIO(response.content))
+                break
+    else:
+         if 'exodos' in choosedGame:
+             response = requests.get(__CONFIG__.EXODOSImageURL)
+             return Image.open(BytesIO(response.content))
+         try:
+             shell = win32com.client.Dispatch("WScript.Shell")
+             launch = findLauncher(choosedGame, __CONFIG__.launcherPrefixes, __CONFIG__.shortcutExt)
+             if launch != None:
+                 shortcut = shell.CreateShortcut(choosedGame + '/' + launch)
+                 return win32_icon_to_image(extract_icon(shortcut.Targetpath, IconSize.LARGE), IconSize.LARGE).resize((128, 128))
+             exeFile = findEXE(choosedGame)
+             if exeFile != None:
+                 return win32_icon_to_image(extract_icon(exeFile[0], IconSize.LARGE), IconSize.LARGE).resize((128, 128))
+         except WindowsError as we:
+             LogException("Error reading ICON image from EXE!", we)
+             return image
+    return image
                
 def openDOSBOX(DOSBOXLocation, DOSBOXExecutable, DOSBOXParameters):
     if "dosbox" in __CHOOSEDGAME__:
@@ -154,6 +169,8 @@ def findEXE(choosedGame):
     exeCount = 0
     exeFolder = ""
     exeFile = ""
+    if findClientURL(choosedGame) != None:
+        return None
     for launch in next(os.walk(choosedGame))[2]:
         if launch.lower().endswith('.exe'):
             exeCount += 1
@@ -192,7 +209,6 @@ def prepareContent(gameFolders,
                    chooseNotInstalled,
                    removals,
                    endswith):
-    shell = win32com.client.Dispatch("WScript.Shell")
     content = []
     ends = tuple(t[1].lower() for t in endswith)
 
@@ -206,14 +222,7 @@ def prepareContent(gameFolders,
                         content = content + [g]
 
     for link in linksList:
-        if (link.endswith(".lnk")):
-            shortcut = shell.CreateShortCut(link[len(linkPrefix):])
-            targetFolder = shortcut.Targetpath.lower().replace('\\','/')
-            targetFolder = targetFolder[:targetFolder.rfind('/')]
-            if targetFolder not in content:
-                content = content + [targetFolder]
-        else:
-            content = content + [link]
+        content = content + [link]
 
     if not chooseNotInstalled:
         for key, steamFolder in steamGameFolders:
@@ -225,6 +234,10 @@ def prepareContent(gameFolders,
     for key, removal in removals:
         content = [g.replace(removal, '') for g in content]
         
+    content = [g.replace("'","_") for g in content]
+    
+    content = list(filter(None, content))
+    
     return content
 
 def gameHasBeenPlayed(choosedGame):
@@ -236,16 +249,14 @@ def init(choosedgame):
     insertGameInfo(__CHOOSEDGAME__)
     
 def executeGame(choosedGame, steamOwnedGames):
-    conf = Config()
-    conf.read_config(None)
     # Executing choosed game
     try:
         init(choosedGame)
         startLink()
-        findLauncherAndStart(conf.launcherPrefixes, conf.shortcutExt)
-        findSteamGameAndLaunch(steamOwnedGames, conf.playGameURL, conf.chooseNotInstalled)
-        findeXoDOSGame(conf.EXODOSLocation)
-        openDOSBOX(conf.DOSBOXLocation, conf.DOSBOXExecutable, conf.DOSBOXParameters)
+        findLauncherAndStart(__CONFIG__.launcherPrefixes, __CONFIG__.shortcutExt)
+        findSteamGameAndLaunch(steamOwnedGames, __CONFIG__.playGameURL, __CONFIG__.chooseNotInstalled)
+        findeXoDOSGame(__CONFIG__.EXODOSLocation)
+        openDOSBOX(__CONFIG__.DOSBOXLocation, __CONFIG__.DOSBOXExecutable, __CONFIG__.DOSBOXParameters)
         executeEXE()
         fallBackToGameFolder()    
     except Exception as e:

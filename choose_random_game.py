@@ -10,52 +10,58 @@ from aesgard.util      import writeListToFile
 from aesgard.util      import writeTupleToFile
 from aesgard.util      import LogException
 from aesgard.database  import init as databaseInit
+from aesgard.database  import importContentToDatabase as importContentToDatabase
 from aesgard.ui        import showChoosedGame
 from aesgard.config    import Config
 
 def run(argv):
-    conf = Config()
-    conf.read_config(argv)
+    __CONFIG__ = Config()
+    __CONFIG__.read_config(argv)
     
     try:
-        databaseInit(conf.DatabaseServer, 
-                     conf.DatabaseUser, 
-                     conf.DatabasePassword, 
-                     conf.DatabaseName, 
-                     conf.DatabaseType)
+        databaseInit(__CONFIG__.DatabaseServer, 
+                     __CONFIG__.DatabaseUser, 
+                     __CONFIG__.DatabasePassword, 
+                     __CONFIG__.DatabaseName, 
+                     __CONFIG__.DatabaseType)
     except Exception as e:
         LogException("Error initializing database!", e)
         return
     
     try:
-        steamOwnedGames = getownedgames(conf.ownedGamesURL, conf.apikey, conf.steamid)
+        steamOwnedGames = getownedgames(__CONFIG__.ownedGamesURL,
+                                        __CONFIG__.apikey, 
+                                        __CONFIG__.steamid)
         steamGamesIds = get_steam_game_ids(steamOwnedGames).items();
     except Exception as e:
         LogException("Steam API not available!", e)
         steamOwnedGames = {}
         steamGamesIds = {}
         
-    gogGames = getGOGGames(conf.GOGDatabase)
+    gogGames = getGOGGames(__CONFIG__.GOGDatabase)
         
-    linksList = preparelinksList(conf.foldersWithLinks, conf.baseLinks)
+    linksList = preparelinksList(__CONFIG__.foldersWithLinks, __CONFIG__.baseLinks)
     
     # Create game list from all sources
     content = list(set(
         prepareContent(
-            conf.gameFolders, 
-            conf.gameCommonFolders, 
-            conf.steamGameFolders, 
+            __CONFIG__.gameFolders, 
+            __CONFIG__.gameCommonFolders, 
+            __CONFIG__.steamGameFolders, 
             linksList,
             steamGamesIds,
-            conf.chooseNotInstalled,
-            conf.removals,
-            conf.endswith)
+            __CONFIG__.chooseNotInstalled,
+            __CONFIG__.removals,
+            __CONFIG__.endswith)
         ))    
     
     # Writing files    
-    if conf.createFiles:
-        writeListToFile(conf.pathToSave + conf.gamesFoundFileName, content)
-        writeTupleToFile(conf.pathToSave + conf.steamGamesOwnedFileName, steamGamesIds)
+    if __CONFIG__.createFiles:
+        writeListToFile(__CONFIG__.pathToSave + __CONFIG__.gamesFoundFileName, content)
+        writeTupleToFile(__CONFIG__.pathToSave + __CONFIG__.steamGamesOwnedFileName, steamGamesIds)
+        
+    if __CONFIG__.importContentToDatabase:
+        importContentToDatabase(content)
 
     choosedGame = chooseGame(content)
         

@@ -23,7 +23,7 @@ def showChoosedGame(choosedGame,  steamOwnedGames):
     my_image = ImageTk.PhotoImage(pilImage)
     image_label = Label(frame_image, image=my_image)
     image_label.pack()
-    Button(root, text=choosedGame, padx=10, pady=5, command=lambda:action(root, choosedGame,  steamOwnedGames)).pack(pady=20)
+    Button(root, text="PLAY -> " + choosedGame, padx=10, pady=5, command=lambda:action(root, choosedGame,  steamOwnedGames)).pack(pady=20)
     root.mainloop()    
     
 def action(root, choosedGame,  steamOwnedGames):

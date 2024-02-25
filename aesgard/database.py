@@ -45,7 +45,6 @@ sqlUPDATE = """
 def insertGameInfo(choosedGame):
     global DBTYPE   
     try:
-        choosedGame = choosedGame.replace("'","_")
         if (not "sqlite" == DBTYPE):
             response = ping(SERVER)
             if (not response.success()):
@@ -55,10 +54,8 @@ def insertGameInfo(choosedGame):
         cursor = conn.cursor()
         id = findGameInfo(choosedGame)
         if id == None:
-           sql = sqlINSERT.format(choosedGame)
-           cursor.execute(sql)
-        sql = sqlUPDATE.format(choosedGame)
-        cursor.execute(sql)  
+           cursor.execute(sqlINSERT.format(choosedGame))
+        cursor.execute(sqlUPDATE.format(choosedGame))  
         conn.commit()
         cursor.close()
         conn.close()
@@ -69,7 +66,6 @@ def insertGameInfo(choosedGame):
 def findGameInfo(choosedGame):
     global DBTYPE   
     try:
-        choosedGame = choosedGame.replace("'","_")
         if (not "sqlite" == DBTYPE):
             response = ping(SERVER)
             if (not response.success()):
@@ -77,8 +73,7 @@ def findGameInfo(choosedGame):
                 DBTYPE = "sqlite"
         conn = opencon()
         cursor = conn.cursor()
-        sql = sqlSELECT.format(choosedGame)
-        cursor.execute(sql)  
+        cursor.execute(sqlSELECT.format(choosedGame))  
         row = cursor.fetchone()
         if row == None:
             return None
@@ -143,4 +138,19 @@ def tablesExists(con):
     finally:
         cursor.close()
 
-        
+def importContentToDatabase(content):
+    conn = opencon()
+    cursor = conn.cursor()
+    try:
+        for game in content:
+            cursor.execute(sqlSELECT.format(game))  
+            row = cursor.fetchone()
+            if row == None:
+                cursor.execute(sqlINSERT.format(game))  
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        LogException("Database connection not available!", e)
+        return None
+    cursor.close()
+    conn.close()
