@@ -1,4 +1,5 @@
 import sys
+from random import shuffle
 
 from aesgard.steam     import getownedgames
 from aesgard.steam     import get_steam_game_ids
@@ -54,7 +55,8 @@ def run(argv):
             __CONFIG__.removals,
             __CONFIG__.endswith)
         ))    
-    
+    shuffle(content)
+
     # Writing files    
     if __CONFIG__.createFiles:
         writeListToFile(__CONFIG__.pathToSave + __CONFIG__.gamesFoundFileName, content)

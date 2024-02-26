@@ -9,6 +9,7 @@ import jellyfish
 import os
 import sys
 import win32com.client 
+from datetime import datetime
 
 from PIL import Image
 import requests
@@ -234,7 +235,7 @@ def prepareContent(gameFolders,
     for key, removal in removals:
         content = [g.replace(removal, '') for g in content]
         
-    content = [g.replace("'","_") for g in content]
+    content = [g.replace("'","''") for g in content]
     
     content = list(filter(None, content))
     
@@ -264,6 +265,8 @@ def executeGame(choosedGame, steamOwnedGames):
     
 # Choosing random game
 def chooseGame(content):
+    curr_dt = datetime.now()
+    random.seed(int(round(curr_dt.timestamp())))
     choosedGame = random.choice(content)
     for x in range(len(content)):
         if gameHasBeenPlayed(choosedGame):

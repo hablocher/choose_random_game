@@ -9,6 +9,7 @@ import configparser
 import getopt
 import os
 import sys
+import datetime
 
 from ctypes import Array, c_char
 from PIL import Image
@@ -66,3 +67,6 @@ def win32_icon_to_image(icon_bits: Array[c_char], size: IconSize) -> Image:
     w, h = IconSize.to_wh(size)
     img = Image.frombytes("RGBA", (w, h), icon_bits, "raw", "BGRA")
     return img
+
+def to_integer(dt_time):
+    return 10000*dt_time.year + 100*dt_time.month + dt_time.day
