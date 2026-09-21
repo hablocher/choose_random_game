@@ -782,6 +782,7 @@ class GamingDashboard(QMainWindow):
         self.comboRerollFilter = QComboBox()
         self.comboRerollFilter.addItems([
             "Todas as Fontes",
+            "Apenas Favoritos (⭐)",
             "Apenas eXoDOS (Instalados)",
             "Apenas Atalhos / Desktop",
             "Apenas Pastas Locais",
@@ -1658,7 +1659,13 @@ class GamingDashboard(QMainWindow):
         filter_mode = self.comboRerollFilter.currentText()
         filtered_content = self.content
 
-        if "eXoDOS" in filter_mode:
+        if "Favoritos" in filter_mode:
+            fav_rows = getGamesList(statusFilter="favorite", limit=50000)
+            fav_names = {r[1] for r in fav_rows}
+            filtered_content = [g for g in self.content if g in fav_names]
+            if not filtered_content and fav_names:
+                filtered_content = list(fav_names)
+        elif "eXoDOS" in filter_mode:
             filtered_content = [g for g in self.content if g.startswith(exodosPrefix) or "exodos" in g.lower()]
         elif "Atalhos" in filter_mode:
             filtered_content = [g for g in self.content if g.startswith(linkPrefix)]
@@ -1874,22 +1881,24 @@ class GamingDashboard(QMainWindow):
         if mode == "all":
             self.comboRerollFilter.setCurrentIndex(0)
         elif mode == "retro":
-            self.comboRerollFilter.setCurrentIndex(1)
+            idx = self.comboRerollFilter.findText("eXoDOS", Qt.MatchFlag.MatchContains)
+            if idx >= 0:
+                self.comboRerollFilter.setCurrentIndex(idx)
         elif mode == "modern":
-            self.comboRerollFilter.setCurrentIndex(4)
+            idx = self.comboRerollFilter.findText("Playnite", Qt.MatchFlag.MatchContains)
+            if idx >= 0:
+                self.comboRerollFilter.setCurrentIndex(idx)
         elif mode == "favorites":
-            favs = [g for g in self.content if (findGameInfo(g) and findGameInfo(g)[5] == 1)]
-            if favs:
-                new_choice = random.choice(favs)
-                if self.chkRoulette.isChecked():
-                    self.startRouletteAnimation(lambda: self.updateHeroDisplay(new_choice))
-                else:
-                    self.updateHeroDisplay(new_choice)
+            idx = self.comboRerollFilter.findText("Favoritos", Qt.MatchFlag.MatchContains)
+            if idx >= 0:
+                self.comboRerollFilter.setCurrentIndex(idx)
             else:
-                QMessageBox.information(self, "Tema da Live", "Nenhum jogo marcado como favorito ainda.")
+                self.onRerollHero()
             return
         elif mode == "backlog":
-            zeros = [g for g in self.content if (not findGameInfo(g) or findGameInfo(g)[2] == 0)]
+            played_rows = getGamesList(statusFilter="played", limit=50000)
+            played_names = {r[1] for r in played_rows}
+            zeros = [g for g in self.content if g not in played_names]
             if zeros:
                 new_choice = chooseGame(zeros, sampleSize=getattr(self.config, 'randomSampleSize', 25))
                 if self.chkRoulette.isChecked():

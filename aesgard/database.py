@@ -210,6 +210,9 @@ def setFinished(choosedGame, finished=1):
         conn = opencon()
         cursor = conn.cursor()
         cursor.execute(sql, (finished, choosedGame))
+        if cursor.rowcount == 0:
+            insert_sql = f"INSERT INTO {TABLE_NAME} (gameName, timesPlayed, finished, lastTimePlayed, favorite) VALUES ({ph}, 0, {ph}, NULL, 0)"
+            cursor.execute(insert_sql, (choosedGame, finished))
         if hasattr(conn, 'commit'):
             conn.commit()
         cursor.close()
@@ -229,6 +232,9 @@ def setFavorite(choosedGame, favorite=1):
         conn = opencon()
         cursor = conn.cursor()
         cursor.execute(sql, (favorite, choosedGame))
+        if cursor.rowcount == 0:
+            insert_sql = f"INSERT INTO {TABLE_NAME} (gameName, timesPlayed, finished, lastTimePlayed, favorite) VALUES ({ph}, 0, 0, NULL, {ph})"
+            cursor.execute(insert_sql, (choosedGame, favorite))
         if hasattr(conn, 'commit'):
             conn.commit()
         cursor.close()
@@ -340,13 +346,15 @@ def getGamesList(searchQuery="", statusFilter="all", limit=1000, offset=0, filte
         conditions.append(f"gameName LIKE {ph}")
         params.append(f"%{searchQuery.strip()}%")
 
-    if statusFilter == "unplayed":
+    # Normalize statusFilter to handle both internal keys and UI strings (English/Portuguese)
+    sf = (statusFilter or "all").strip().lower()
+    if sf in ("unplayed", "não jogados", "nao jogados", "nao_jogados"):
         conditions.append("timesPlayed = 0")
-    elif statusFilter == "played":
+    elif sf in ("played", "jogados"):
         conditions.append("timesPlayed > 0")
-    elif statusFilter == "finished":
+    elif sf in ("finished", "zerados", "zerado"):
         conditions.append("finished = 1")
-    elif statusFilter == "favorite":
+    elif sf in ("favorite", "favorites", "favoritos", "favorito", "⭐ favoritos"):
         conditions.append("favorite = 1")
 
     where_clause = ""
