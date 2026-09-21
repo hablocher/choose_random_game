@@ -442,6 +442,57 @@ class GamingDashboard(QMainWindow):
         self.btnCleanDb.clicked.connect(self.onCleanDatabase)
         headerLayout.addWidget(self.btnCleanDb)
 
+        # YouTube Channels (Principal & Secundário)
+        ytBox = QHBoxLayout()
+        ytBox.setSpacing(6)
+
+        mainChannelUrl = getattr(self.config, 'streamerYouTubeMainChannel', 'https://www.youtube.com/@CaninoBranco')
+        liveChannelUrl = getattr(self.config, 'streamerYouTubeLiveChannel', 'https://www.youtube.com/@RandomLiveGameplays')
+
+        self.btnYtMain = QPushButton("📺 Principal: @CaninoBranco")
+        self.btnYtMain.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnYtMain.setToolTip(f"Canal Principal no YouTube (Vídeos e Análises):\n{mainChannelUrl}")
+        self.btnYtMain.setStyleSheet("""
+            QPushButton {
+                background-color: #1a1d26;
+                color: #ff7675;
+                border: 1px solid #ff4757;
+                border-radius: 6px;
+                padding: 4px 10px;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #ff4757;
+                color: #ffffff;
+            }
+        """)
+        self.btnYtMain.clicked.connect(lambda: webbrowser.open(mainChannelUrl))
+
+        self.btnYtLive = QPushButton("🔴 Lives: @RandomLiveGameplays")
+        self.btnYtLive.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnYtLive.setToolTip(f"Canal Secundário de Lives e Gameplay ao Vivo:\n{liveChannelUrl}")
+        self.btnYtLive.setStyleSheet("""
+            QPushButton {
+                background-color: #1a1d26;
+                color: #a29bfe;
+                border: 1px solid #6c5ce7;
+                border-radius: 6px;
+                padding: 4px 10px;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #6c5ce7;
+                color: #ffffff;
+            }
+        """)
+        self.btnYtLive.clicked.connect(lambda: webbrowser.open(liveChannelUrl))
+
+        ytBox.addWidget(self.btnYtMain)
+        ytBox.addWidget(self.btnYtLive)
+        headerLayout.addLayout(ytBox)
+
         headerLayout.addStretch()
 
         # 4 Stat Cards
@@ -1162,6 +1213,49 @@ class GamingDashboard(QMainWindow):
         self.btnRefreshLiveHistory.clicked.connect(self.refreshLiveHistoryTable)
         topBar.addWidget(self.btnRefreshLiveHistory)
         layout.addLayout(topBar)
+
+        # YouTube Channels Showcase Banner
+        mainChannelUrl = getattr(self.config, 'streamerYouTubeMainChannel', 'https://www.youtube.com/@CaninoBranco')
+        liveChannelUrl = getattr(self.config, 'streamerYouTubeLiveChannel', 'https://www.youtube.com/@RandomLiveGameplays')
+
+        channelBanner = QFrame()
+        channelBanner.setStyleSheet("""
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #151821, stop:1 #201a2d);
+                border: 1px solid #6c5ce7;
+                border-radius: 8px;
+                padding: 6px 12px;
+            }
+        """)
+        cbLayout = QHBoxLayout(channelBanner)
+        cbLayout.setContentsMargins(6, 4, 6, 4)
+        cbLayout.setSpacing(10)
+
+        bannerText = QLabel(
+            "<b>🔴 Canal de Lives (Secundário):</b> <a href='https://www.youtube.com/@RandomLiveGameplays' style='color: #a29bfe; text-decoration: none;'>@RandomLiveGameplays</a> &nbsp;&nbsp;|&nbsp;&nbsp; "
+            "<b>📺 Canal Principal:</b> <a href='https://www.youtube.com/@CaninoBranco' style='color: #ff7675; text-decoration: none;'>@CaninoBranco</a>"
+        )
+        bannerText.setFont(QFont("Segoe UI", 10))
+        bannerText.setStyleSheet("color: #e2e8f0;")
+        bannerText.setOpenExternalLinks(True)
+        cbLayout.addWidget(bannerText)
+        cbLayout.addStretch()
+
+        btnOpenLiveYt = QPushButton("🔴 Abrir Canal de Lives")
+        btnOpenLiveYt.setObjectName("BtnSecondary")
+        btnOpenLiveYt.setCursor(Qt.CursorShape.PointingHandCursor)
+        btnOpenLiveYt.setStyleSheet("font-size: 11px; padding: 4px 8px;")
+        btnOpenLiveYt.clicked.connect(lambda: webbrowser.open(liveChannelUrl))
+        cbLayout.addWidget(btnOpenLiveYt)
+
+        btnOpenMainYt = QPushButton("📺 Abrir Canal Principal")
+        btnOpenMainYt.setObjectName("BtnSecondary")
+        btnOpenMainYt.setCursor(Qt.CursorShape.PointingHandCursor)
+        btnOpenMainYt.setStyleSheet("font-size: 11px; padding: 4px 8px;")
+        btnOpenMainYt.clicked.connect(lambda: webbrowser.open(mainChannelUrl))
+        cbLayout.addWidget(btnOpenMainYt)
+
+        layout.addWidget(channelBanner)
 
         # Add Live Entry Bar
         entryFrame = QFrame()

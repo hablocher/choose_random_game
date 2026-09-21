@@ -114,7 +114,9 @@ class Config:
         # -------------------------------------------------------------
         # [STREAMER] YouTube Live & Stream Assistant Settings
         # -------------------------------------------------------------
-        self.streamerRouletteEnabled    = self.config.getboolean('STREAMER', 'rouletteEnabled', fallback=True)
-        self.streamerRouletteDurationMs = self.config.getint('STREAMER', 'rouletteDurationMs', fallback=2600)
-        self.streamerOverlayChromaKey   = self.config.get('STREAMER', 'overlayChromaKey', fallback='dark')
-        self.streamerYouTubeChannel     = self.config.get('STREAMER', 'youtubeChannel', fallback='')
+        self.streamerRouletteEnabled       = self.config.getboolean('STREAMER', 'rouletteEnabled', fallback=True)
+        self.streamerRouletteDurationMs    = self.config.getint('STREAMER', 'rouletteDurationMs', fallback=2600)
+        self.streamerOverlayChromaKey      = self.config.get('STREAMER', 'overlayChromaKey', fallback='dark')
+        self.streamerYouTubeMainChannel    = self.config.get('STREAMER', 'youtubeMainChannel', fallback='https://www.youtube.com/@CaninoBranco')
+        self.streamerYouTubeLiveChannel    = self.config.get('STREAMER', 'youtubeLiveChannel', fallback='https://www.youtube.com/@RandomLiveGameplays')
+        self.streamerYouTubeChannel        = self.config.get('STREAMER', 'youtubeChannel', fallback=self.streamerYouTubeLiveChannel)
