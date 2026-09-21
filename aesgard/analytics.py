@@ -117,10 +117,31 @@ class DonutChartWidget(QWidget):
         rect = QRectF(20, 20, 180, 180)
         start_angle = 90 * 16
 
-        colors = [
-            "#38bdf8", "#818cf8", "#34d399", "#f59e0b",
-            "#ec4899", "#a855f7", "#06b6d4", "#64748b"
-        ]
+CHART_COLORS = [
+    "#38bdf8", "#818cf8", "#34d399", "#f59e0b",
+    "#ec4899", "#a855f7", "#06b6d4", "#f43f5e",
+    "#10b981", "#fb923c", "#6366f1", "#64748b"
+]
+
+
+class DonutChartWidget(QWidget):
+    """Clean antialiased Donut Chart for platform distribution."""
+
+    def __init__(self, platform_data: Dict[str, int], parent=None):
+        super().__init__(parent)
+        self.platform_data = platform_data
+        self.setFixedSize(220, 220)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        total = sum(self.platform_data.values())
+        if total == 0:
+            return
+
+        rect = QRectF(20, 20, 180, 180)
+        start_angle = 90 * 16
 
         pen = QPen(Qt.PenStyle.NoPen)
         painter.setPen(pen)
@@ -128,7 +149,7 @@ class DonutChartWidget(QWidget):
         # Draw arcs
         for i, (plat, count) in enumerate(self.platform_data.items()):
             span_angle = int((count / total) * 360 * 16)
-            color = QColor(colors[i % len(colors)])
+            color = QColor(CHART_COLORS[i % len(CHART_COLORS)])
             painter.setBrush(QBrush(color))
             painter.drawPie(rect, start_angle, span_angle)
             start_angle += span_angle
@@ -151,13 +172,33 @@ class AnalyticsDialog(QDialog):
     def __init__(self, content: List[str], parent=None):
         super().__init__(parent)
         self.setWindowTitle("📊 Métricas & Estatísticas do Backlog")
-        self.setFixedSize(760, 620)
+        self.setFixedSize(860, 640)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
         self.content = content
         self._init_ui()
 
     def _init_ui(self):
-        self.setStyleSheet("background-color: #090d16; color: #ffffff;")
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #090d16;
+                color: #ffffff;
+            }
+            QFrame#StatCard {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #111827, stop:1 #1f2937);
+                border: 1px solid #374151;
+                border-radius: 10px;
+            }
+            QFrame#AnalyticsCard {
+                background-color: #0d121f;
+                border: 1px solid #1e293b;
+                border-radius: 12px;
+            }
+            QLabel {
+                background: transparent;
+                border: none;
+                padding: 0px;
+            }
+        """)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
@@ -186,20 +227,15 @@ class AnalyticsDialog(QDialog):
 
         # Top Metric Cards (3 cards: Total Jogos, Zerados, Horas Restantes)
         cards_row = QHBoxLayout()
-        cards_row.setSpacing(12)
+        cards_row.setSpacing(14)
 
         def make_card(label: str, value: str, sub: str, color: str) -> QFrame:
             f = QFrame()
-            f.setStyleSheet(f"""
-                QFrame {{
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #111827, stop:1 #1f2937);
-                    border: 1px solid #374151;
-                    border-radius: 10px;
-                    padding: 12px;
-                }}
-            """)
+            f.setObjectName("StatCard")
             c_l = QVBoxLayout(f)
+            c_l.setContentsMargins(16, 14, 16, 14)
             c_l.setSpacing(4)
+            
             lbl = QLabel(label)
             lbl.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
             lbl.setStyleSheet("color: #94a3b8;")
@@ -213,6 +249,7 @@ class AnalyticsDialog(QDialog):
             sub_lbl = QLabel(sub)
             sub_lbl.setFont(QFont("Segoe UI", 8))
             sub_lbl.setStyleSheet("color: #64748b;")
+            sub_lbl.setWordWrap(True)
             c_l.addWidget(sub_lbl)
             return f
 
@@ -227,8 +264,9 @@ class AnalyticsDialog(QDialog):
 
         # Left: Donut Chart Widget
         chart_card = QFrame()
-        chart_card.setStyleSheet("background-color: #0d121f; border: 1px solid #1e293b; border-radius: 12px; padding: 12px;")
+        chart_card.setObjectName("AnalyticsCard")
         chart_layout = QVBoxLayout(chart_card)
+        chart_layout.setContentsMargins(16, 16, 16, 16)
         chart_title = QLabel("DISTRIBUIÇÃO POR PLATAFORMA")
         chart_title.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
         chart_title.setStyleSheet("color: #cbd5e1;")
@@ -240,52 +278,73 @@ class AnalyticsDialog(QDialog):
 
         # Right: Platform legend & Top Played
         right_col = QVBoxLayout()
-        right_col.setSpacing(12)
+        right_col.setSpacing(14)
 
         # Top Played Card
         top_card = QFrame()
-        top_card.setStyleSheet("background-color: #0d121f; border: 1px solid #1e293b; border-radius: 12px; padding: 12px;")
+        top_card.setObjectName("AnalyticsCard")
         top_layout = QVBoxLayout(top_card)
+        top_layout.setContentsMargins(16, 14, 16, 14)
+        top_layout.setSpacing(8)
+
         top_title = QLabel("🏆 TOP 5 MAIS JOGADOS")
         top_title.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        top_title.setStyleSheet("color: #cbd5e1;")
+        top_title.setStyleSheet("color: #38bdf8; margin-bottom: 2px;")
         top_layout.addWidget(top_title)
 
         if data["top_played"]:
-            for name, plays in data["top_played"]:
+            for idx, (name, plays) in enumerate(data["top_played"]):
                 p_row = QHBoxLayout()
-                n_lbl = QLabel(name[:30] + ("..." if len(name) > 30 else ""))
-                n_lbl.setStyleSheet("color: #e2e8f0; font-size: 11px;")
+                p_row.setSpacing(8)
+                rank_color = ["#fbbf24", "#94a3b8", "#d97706", "#64748b", "#64748b"][idx % 5]
+                r_lbl = QLabel(f"#{idx+1}")
+                r_lbl.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+                r_lbl.setStyleSheet(f"color: {rank_color};")
+                
+                n_lbl = QLabel(name[:34] + ("..." if len(name) > 34 else ""))
+                n_lbl.setStyleSheet("color: #f1f5f9; font-size: 11px;")
+                
                 p_lbl = QLabel(f"{plays}x")
-                p_lbl.setStyleSheet("color: #38bdf8; font-weight: bold; font-size: 11px;")
+                p_lbl.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+                p_lbl.setStyleSheet("color: #38bdf8;")
+                
+                p_row.addWidget(r_lbl)
                 p_row.addWidget(n_lbl)
                 p_row.addStretch()
                 p_row.addWidget(p_lbl)
                 top_layout.addLayout(p_row)
         else:
             empty_lbl = QLabel("Nenhum histórico de jogatina registrado ainda.")
-            empty_lbl.setStyleSheet("color: #64748b; font-size: 11px;")
+            empty_lbl.setStyleSheet("color: #64748b; font-size: 11px; padding: 6px 0;")
             top_layout.addWidget(empty_lbl)
 
         right_col.addWidget(top_card)
 
         # Platform Legend Pills
         plat_card = QFrame()
-        plat_card.setStyleSheet("background-color: #0d121f; border: 1px solid #1e293b; border-radius: 12px; padding: 12px;")
+        plat_card.setObjectName("AnalyticsCard")
         plat_layout = QVBoxLayout(plat_card)
+        plat_layout.setContentsMargins(16, 14, 16, 14)
+        plat_layout.setSpacing(10)
+
         plat_title = QLabel("🏷️ PLATAFORMAS DETECTADAS")
         plat_title.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        plat_title.setStyleSheet("color: #cbd5e1;")
+        plat_title.setStyleSheet("color: #38bdf8; margin-bottom: 2px;")
         plat_layout.addWidget(plat_title)
 
         p_grid = QGridLayout()
-        p_grid.setSpacing(8)
+        p_grid.setHorizontalSpacing(14)
+        p_grid.setVerticalSpacing(8)
+        
         sorted_plats = sorted(data["platforms"].items(), key=lambda x: x[1], reverse=True)[:8]
         for idx, (p_name, count) in enumerate(sorted_plats):
-            p_lbl = QLabel(f"• {p_name}: <b>{count}</b>")
-            p_lbl.setStyleSheet("color: #cbd5e1; font-size: 11px;")
+            dot_color = CHART_COLORS[idx % len(CHART_COLORS)]
+            p_lbl = QLabel(f"<span style='color: {dot_color}; font-size: 14px;'>●</span> <span style='color: #e2e8f0;'>{p_name}:</span> <b style='color: #38bdf8;'>{count}</b>")
+            p_lbl.setFont(QFont("Segoe UI", 10))
+            p_lbl.setTextFormat(Qt.TextFormat.RichText)
             r, c = divmod(idx, 2)
             p_grid.addWidget(p_lbl, r, c)
+            
         plat_layout.addLayout(p_grid)
 
         right_col.addWidget(plat_card)
