@@ -35,7 +35,7 @@ from aesgard.database import (
     getDatabaseStats, getGamesList, setFinished, setFavorite,
     findGameInfo, getRandomGoty, getAllGotys, importContentToDatabase
 )
-from aesgard.ui import formatDisplayName, detectPlatform, getPlatformColor
+from aesgard.ui import formatDisplayName, detectPlatform, getPlatformColor, clearPlayniteMetaCache
 from aesgard.intel_dialog import GameIntelDialog
 from aesgard.streamer import LiveHistoryManager, StreamerOverlayWindow
 
@@ -306,35 +306,6 @@ QProgressBar::chunk {
 }
 """
 
-def detectPlatform(rawName):
-    """Detects the platform/source of a game entry."""
-    if rawName.startswith(PLAYNITE_PREFIX):
-        return "Playnite"
-    elif rawName.startswith("steam:"):
-        return "Steam"
-    elif rawName.startswith(exodosPrefix) or "exodos" in rawName.lower():
-        return "eXoDOS"
-    elif rawName.startswith(linkPrefix):
-        return "Atalho / Desktop"
-    elif "dosbox" in rawName.lower():
-        return "DOSBox"
-    elif rawName.startswith("gog:"):
-        return "GOG"
-    else:
-        return "Instalação Local"
-
-def getPlatformColor(platform):
-    """Returns a distinct badge color for each platform."""
-    colors = {
-        "Steam": "#1b2838",
-        "eXoDOS": "#744210",
-        "Playnite": "#ff6b6b",
-        "Atalho / Desktop": "#2c3e50",
-        "DOSBox": "#4a5568",
-        "GOG": "#4b1e78",
-        "Instalação Local": "#1a365d"
-    }
-    return colors.get(platform, "#2d3748")
 
 def extractChannelHandle(url: str, default: str = "") -> str:
     """Extracts @handle or channel name from YouTube URL."""
@@ -659,8 +630,9 @@ class GamingDashboard(QMainWindow):
         themes = [
             ("🌟 Todos", "all"),
             ("🆕 Backlog Zero (0x)", "backlog"),
+            ("🎮 Emuladores", "emulators"),
             ("🕹️ Só Retrô (eXoDOS)", "retro"),
-            ("🚀 Só Modernos (Steam/Playnite)", "modern"),
+            ("🚀 Só PC / Lojas", "modern"),
             ("⭐ Favoritos", "favorites")
         ]
         for t_label, t_mode in themes:
@@ -803,10 +775,11 @@ class GamingDashboard(QMainWindow):
             "Apenas Instalados (Prontos p/ Jogar)",
             "Apenas Não Instalados (p/ Baixar)",
             "Apenas Favoritos (⭐)",
+            "Apenas Emuladores / Consoles (Playnite)",
+            "Apenas Playnite (Lojas & Emuladores)",
             "Apenas eXoDOS (Instalados)",
             "Apenas Atalhos / Desktop",
-            "Apenas Pastas Locais",
-            "Apenas Playnite (Steam, GOG, Epic)"
+            "Apenas Pastas Locais"
         ])
         self.comboRerollFilter.currentIndexChanged.connect(self.onRerollHero)
         filterRow.addWidget(filterLbl)
@@ -1813,6 +1786,33 @@ class GamingDashboard(QMainWindow):
             filtered_content = [g for g in self.content if g.startswith(linkPrefix)]
         elif "Locais" in filter_mode:
             filtered_content = [g for g in self.content if not g.startswith(linkPrefix) and not g.startswith(exodosPrefix) and not g.startswith(PLAYNITE_PREFIX)]
+        elif "Emuladores" in filter_mode or "Consoles" in filter_mode:
+            all_known_stores = {
+                "Steam", "GOG", "Epic", "Epic Games", "Xbox", "Amazon", 
+                "Amazon Games", "Ubisoft", "EA app", "Battle.net", "Riot Games", 
+                "eXoDOS", "DOSBox", "Atalho / Desktop", "Instalação Local", "Playnite"
+            }
+            filtered_content = [
+                g for g in self.content 
+                if g.startswith(PLAYNITE_PREFIX) and detectPlatform(g) not in all_known_stores
+            ]
+            if not filtered_content:
+                try:
+                    from aesgard.playnite import loadPlayniteGames, formatPlayniteEntries
+                    pn_path = getattr(self.config, 'playnitePath', '')
+                    pn_games = loadPlayniteGames(pn_path, onlyInstalled=False)
+                    if pn_games:
+                        pn_entries = formatPlayniteEntries(pn_games)
+                        for entry in pn_entries:
+                            if entry not in self.content:
+                                self.content.append(entry)
+                        filtered_content = [
+                            g for g in pn_entries
+                            if detectPlatform(g) not in all_known_stores
+                        ]
+                        logger.info(f"Carregados {len(filtered_content)} jogos de emuladores do Playnite sob demanda.")
+                except Exception as e:
+                    logger.warning(f"Erro ao carregar jogos de emuladores sob demanda: {e}")
         elif "Playnite" in filter_mode:
             filtered_content = [
                 g for g in self.content 
@@ -1949,6 +1949,7 @@ class GamingDashboard(QMainWindow):
         QApplication.processEvents()
 
         try:
+            clearPlayniteMetaCache()
             scanned = scanAllSources(self.config, includeUninstalled=True)
             stats_import = importContentToDatabase(scanned)
             self.content = [entry for entry, _ in scanned]
@@ -2098,6 +2099,10 @@ class GamingDashboard(QMainWindow):
     def onApplyLiveTheme(self, mode):
         if mode == "all":
             self.comboRerollFilter.setCurrentIndex(0)
+        elif mode == "emulators":
+            idx = self.comboRerollFilter.findText("Emuladores", Qt.MatchFlag.MatchContains)
+            if idx >= 0:
+                self.comboRerollFilter.setCurrentIndex(idx)
         elif mode == "retro":
             idx = self.comboRerollFilter.findText("eXoDOS", Qt.MatchFlag.MatchContains)
             if idx >= 0:

@@ -66,6 +66,8 @@ def loadPlayniteGames(playnitePath, onlyInstalled=True, exportJsonPath=None):
                             "cover": item.get("CoverImage", item.get("cover", "")),
                             "icon": item.get("Icon", item.get("icon", "")),
                             "is_installed": is_installed,
+                            "platform": item.get("Platform", item.get("platform", "")),
+                            "source": item.get("Source", item.get("source", "Playnite")),
                         })
                     if games:
                         logger.info(f"Loaded {len(games)} games from Playnite export: {json_file}")
