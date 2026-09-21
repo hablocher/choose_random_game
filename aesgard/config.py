@@ -1,57 +1,120 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Feb 23 11:20:48 2024
-
-@author: Marcelo
+Configuration manager for Choose Random Game.
+All parameters, paths, thresholds, and UI options are read from the .ini file.
 """
-from aesgard.util      import readConfigFile
+import os
+from aesgard.util import readConfigFile
 
 class Config:
     
     def read_config(self, argv):
         self.config = readConfigFile(argv)
 
-        self.apikey                  = self.config['STEAM']['apikey']
-        self.steamid                 = self.config['STEAM']['steamid']
-        self.ownedGamesURL           = self.config['STEAM']['ownedGamesURL']
-        self.imageURL                = self.config['STEAM']['imageGameURL']
-        self.playGameURL             = self.config['STEAM']['playGameURL']
-        self.chooseNotInstalled      = self.config.getboolean('STEAM','chooseNotInstalled')
+        # -------------------------------------------------------------
+        # [CONFIG] General Options
+        # -------------------------------------------------------------
+        self.baseLinks               = self.config.get('CONFIG', 'baseLinks', fallback='')
+        self.shortcutExt             = self.config.get('CONFIG', 'shortcutExt', fallback='.lnk')
+        self.includeDesktop          = self.config.getboolean('CONFIG', 'includeDesktop', fallback=True)
+        self.desktopPath             = self.config.get('CONFIG', 'desktopPath', fallback=os.path.join(os.path.expanduser("~"), "Desktop"))
+        self.onlyFavorites           = self.config.getboolean('CONFIG', 'onlyFavorites', fallback=False)
+        self.importContentToDatabase = self.config.getboolean('CONFIG', 'importContentToDatabase', fallback=True)
+        self.randomSampleSize        = self.config.getint('CONFIG', 'randomSampleSize', fallback=25)
+        self.levenshteinMaxDistance  = self.config.getint('CONFIG', 'levenshteinMaxDistance', fallback=2)
+        self.jaroWinklerThreshold    = self.config.getfloat('CONFIG', 'jaroWinklerThreshold', fallback=0.85)
+        self.linkPrefix              = self.config.get('CONFIG', 'linkPrefix', fallback='link::')
+        self.coversCacheDir          = self.config.get('CONFIG', 'coversCacheDir', fallback='covers_cache')
+        self.fetchOnlineCovers       = self.config.getboolean('CONFIG', 'fetchOnlineCovers', fallback=True)
     
-        self.baseLinks               = self.config['CONFIG']['baseLinks']
-        self.onlyFavorites           = self.config['CONFIG']['onlyFavorites']
-        self.shortcutExt             = self.config['CONFIG']['shortcutExt']
-        self.importContentToDatabase = self.config.getboolean('CONFIG','importContentToDatabase')
+        # -------------------------------------------------------------
+        # [FILES] Debug & Export Logs
+        # -------------------------------------------------------------
+        self.createFiles             = self.config.getboolean('FILES', 'createFiles', fallback=False)
+        self.pathToSave              = self.config.get('FILES', 'pathToSave', fallback='')
+        self.gamesFoundFileName      = self.config.get('FILES', 'gamesFoundFileName', fallback='GameFoldersFound.txt')
     
-        self.createFiles             = self.config.getboolean('FILES','createFiles')
-        self.pathToSave              = self.config['FILES']['pathToSave']
-        self.gamesFoundFileName      = self.config['FILES']['gamesFoundFileName']
-        self.steamGamesOwnedFileName = self.config['FILES']['gamesOwnedFileName']
-    
-        self.gameFolders             = self.config.items("GAMEFOLDERS")
-        self.foldersWithLinks        = self.config.items("FOLDERSWITHLINKS")
-        self.gameCommonFolders       = self.config.items("GAMECOMMONFOLDERS")
-        self.steamGameFolders        = self.config.items("STEAMGAMEFOLDERS")
-        self.removals                = self.config.items("REMOVALS")
-        self.endswith                = self.config.items("ENDSWITH")
+        # -------------------------------------------------------------
+        # Directory Collections & Filters
+        # -------------------------------------------------------------
+        self.gameFolders             = self.config.items("GAMEFOLDERS") if self.config.has_section("GAMEFOLDERS") else []
+        self.foldersWithLinks        = self.config.items("FOLDERSWITHLINKS") if self.config.has_section("FOLDERSWITHLINKS") else []
+        self.gameCommonFolders       = self.config.items("GAMECOMMONFOLDERS") if self.config.has_section("GAMECOMMONFOLDERS") else []
+        self.removals                = self.config.items("REMOVALS") if self.config.has_section("REMOVALS") else []
+        self.endswith                = self.config.items("ENDSWITH") if self.config.has_section("ENDSWITH") else []
         
-        self.DatabaseServer          = self.config['DATABASE']['server']
-        self.DatabaseUser            = self.config['DATABASE']['user']
-        self.DatabasePassword        = self.config['DATABASE']['password']
-        self.DatabaseName            = self.config['DATABASE']['name']
-        self.DatabaseType            = self.config['DATABASE']['type']
-        
-        self.GOGDatabase             = self.config['GOG']['database']
+        # -------------------------------------------------------------
+        # [DATABASE] Connection & Table
+        # -------------------------------------------------------------
+        self.DatabaseServer          = self.config.get('DATABASE', 'server', fallback='localhost')
+        self.DatabaseUser            = self.config.get('DATABASE', 'user', fallback='sa')
+        self.DatabasePassword        = self.config.get('DATABASE', 'password', fallback='')
+        self.DatabaseName            = self.config.get('DATABASE', 'name', fallback='Games.db')
+        self.DatabaseType            = self.config.get('DATABASE', 'type', fallback='sqlite')
+        self.DatabaseTableName       = self.config.get('DATABASE', 'tableName', fallback='GamesChoosed')
 
-        self.launcherPrefixes        = self.config.items("LAUNCHERPREFIXES")    
-        self.otherClients            = self.config.items("OTHERCLIENTS")    
+        # -------------------------------------------------------------
+        # [LAUNCHERPREFIXES] & [OTHERCLIENTS]
+        # -------------------------------------------------------------
+        self.launcherPrefixes        = self.config.items("LAUNCHERPREFIXES") if self.config.has_section("LAUNCHERPREFIXES") else []
+        self.otherClients            = self.config.items("OTHERCLIENTS") if self.config.has_section("OTHERCLIENTS") else []
 
-        self.DOSBOXLocation          = self.config['DOSBOX']['DOSBOXLocation']
-        self.DOSBOXParameters        = self.config['DOSBOX']['DOSBOXParameters']
-        self.DOSBOXExecutable        = self.config['DOSBOX']['DOSBOXExecutable']
+        # -------------------------------------------------------------
+        # [DOSBOX]
+        # -------------------------------------------------------------
+        self.DOSBOXLocation          = self.config.get('DOSBOX', 'DOSBOXLocation', fallback='')
+        self.DOSBOXParameters        = self.config.get('DOSBOX', 'DOSBOXParameters', fallback='-userconf -c {} -c _run.bat')
+        self.DOSBOXExecutable        = self.config.get('DOSBOX', 'DOSBOXExecutable', fallback='DOSBox.exe')
 
-        self.EXODOSLocation          = self.config['EXODOS']['EXODOSLocation']
-        self.EXODOSImageURL          = self.config['EXODOS']['EXODOSImageURL']
+        # -------------------------------------------------------------
+        # [EXODOS]
+        # -------------------------------------------------------------
+        self.EXODOSLocation          = self.config.get('EXODOS', 'EXODOSLocation', fallback='')
+        self.EXODOSImageURL          = self.config.get('EXODOS', 'EXODOSImageURL', fallback='')
+        self.imageURL                = self.EXODOSImageURL
+        self.EXODOSMetadataFolder    = self.config.get('EXODOS', 'metadataFolder', fallback='!dos')
+        self.EXODOSInstallBat        = self.config.get('EXODOS', 'installBat', fallback='install.bat')
+        self.EXODOSOnlyInstalled     = self.config.getboolean('EXODOS', 'onlyInstalled', fallback=True)
+        self.exodosPrefix            = self.config.get('EXODOS', 'exodosPrefix', fallback='exodos:')
 
-        
+        # -------------------------------------------------------------
+        # [PLAYNITE] Integration (Unifies Steam, GOG, Epic, etc.)
+        # -------------------------------------------------------------
+        self.playniteEnabled         = self.config.getboolean('PLAYNITE', 'enabled', fallback=True)
+        self.playnitePath            = self.config.get('PLAYNITE', 'path', fallback='')
+        self.playniteOnlyInstalled   = self.config.getboolean('PLAYNITE', 'onlyInstalled', fallback=True)
+        self.playniteExportJson      = self.config.get('PLAYNITE', 'exportJson', fallback='playnite_games.json')
+        self.playniteUriPrefix       = self.config.get('PLAYNITE', 'uriPrefix', fallback='playnite://playnite/start/')
+        self.playniteLibraryFilesDir = self.config.get('PLAYNITE', 'libraryFilesDir', fallback='library/files')
+        self.playnitePrefix          = self.config.get('PLAYNITE', 'playnitePrefix', fallback='playnite:')
 
+        # -------------------------------------------------------------
+        # [GOG] Integration & Cover Database
+        # -------------------------------------------------------------
+        self.gogEnabled              = self.config.getboolean('GOG', 'enabled', fallback=True)
+        self.gogGalaxyDbPath         = self.config.get('GOG', 'galaxyDbPath', fallback='')
+
+        # -------------------------------------------------------------
+        # [STEAM] Integration & Cover Database
+        # -------------------------------------------------------------
+        self.steamEnabled            = self.config.getboolean('STEAM', 'enabled', fallback=True)
+        self.steamPath               = self.config.get('STEAM', 'steamPath', fallback=r'C:\Program Files (x86)\Steam')
+
+        # -------------------------------------------------------------
+        # [UI] Dashboard & Display Settings
+        # -------------------------------------------------------------
+        self.uiWindowWidth           = self.config.getint('UI', 'windowWidth', fallback=1180)
+        self.uiWindowHeight          = self.config.getint('UI', 'windowHeight', fallback=740)
+        self.uiMinWidth              = self.config.getint('UI', 'minWidth', fallback=960)
+        self.uiMinHeight             = self.config.getint('UI', 'minHeight', fallback=600)
+        self.uiTableLimit            = self.config.getint('UI', 'tableLimit', fallback=400)
+        self.uiCoverWidth            = self.config.getint('UI', 'coverWidth', fallback=160)
+        self.uiCoverHeight           = self.config.getint('UI', 'coverHeight', fallback=160)
+
+        # -------------------------------------------------------------
+        # [STREAMER] YouTube Live & Stream Assistant Settings
+        # -------------------------------------------------------------
+        self.streamerRouletteEnabled    = self.config.getboolean('STREAMER', 'rouletteEnabled', fallback=True)
+        self.streamerRouletteDurationMs = self.config.getint('STREAMER', 'rouletteDurationMs', fallback=2600)
+        self.streamerOverlayChromaKey   = self.config.get('STREAMER', 'overlayChromaKey', fallback='dark')
+        self.streamerYouTubeChannel     = self.config.get('STREAMER', 'youtubeChannel', fallback='')

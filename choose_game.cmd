@@ -1,4 +1,4 @@
 @echo off
-call conda activate
+call conda activate dev
 python choose_random_game.py
-pause
+rem pause

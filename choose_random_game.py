@@ -1,75 +1,115 @@
+# -*- coding: utf-8 -*-
+"""
+Choose Random Game - Main Entry Point.
+Aggregates games from Local folders, Shortcuts, eXoDOS (installed only), and Playnite.
+Launches the Modern Gaming Dashboard.
+"""
 import sys
-from random import shuffle
+import logging
 
-from aesgard.steam     import getownedgames
-from aesgard.steam     import get_steam_game_ids
-from aesgard.gog       import getGOGGames
-from aesgard.gameutil  import prepareContent
-from aesgard.gameutil  import preparelinksList
-from aesgard.gameutil  import chooseGame
-from aesgard.util      import writeListToFile
-from aesgard.util      import writeTupleToFile
-from aesgard.util      import LogException
-from aesgard.database  import init as databaseInit
-from aesgard.database  import importContentToDatabase as importContentToDatabase
-from aesgard.ui        import showChoosedGame
-from aesgard.config    import Config
+from aesgard.playnite import loadPlayniteGames, formatPlayniteEntries, getDefaultPlaynitePath
+from aesgard.gameutil import prepareContent, preparelinksList, chooseGame
+from aesgard.util import writeListToFile, LogException
+from aesgard.database import init as databaseInit, importContentToDatabase, syncGotyGames
+from aesgard.ui import showChoosedGame
+from aesgard.config import Config
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(levelname)s] %(asctime)s - %(name)s: %(message)s',
+    datefmt='%H:%M:%S'
+)
+logger = logging.getLogger("choose_random_game")
 
 def run(argv):
-    __CONFIG__ = Config()
-    __CONFIG__.read_config(argv)
+    config = Config()
+    config.read_config(argv)
     
+    # 1. Initialize Database
     try:
-        databaseInit(__CONFIG__.DatabaseServer, 
-                     __CONFIG__.DatabaseUser, 
-                     __CONFIG__.DatabasePassword, 
-                     __CONFIG__.DatabaseName, 
-                     __CONFIG__.DatabaseType)
+        databaseInit(
+            config.DatabaseServer, 
+            config.DatabaseUser, 
+            config.DatabasePassword, 
+            config.DatabaseName, 
+            config.DatabaseType,
+            table_name=config.DatabaseTableName
+        )
     except Exception as e:
         LogException("Error initializing database!", e)
         return
-    
-    try:
-        steamOwnedGames = getownedgames(__CONFIG__.ownedGamesURL,
-                                        __CONFIG__.apikey, 
-                                        __CONFIG__.steamid)
-        steamGamesIds = get_steam_game_ids(steamOwnedGames).items();
-    except Exception as e:
-        LogException("Steam API not available!", e)
-        steamOwnedGames = {}
-        steamGamesIds = {}
         
-    gogGames = getGOGGames(__CONFIG__.GOGDatabase)
-        
-    linksList = preparelinksList(__CONFIG__.foldersWithLinks, __CONFIG__.baseLinks)
+    # 2. Query Playnite Library (Unifies Steam, GOG, Epic, etc.)
+    playniteEntries = []
+    if getattr(config, 'playniteEnabled', True):
+        try:
+            playnite_path = config.playnitePath or getDefaultPlaynitePath()
+            playnite_games = loadPlayniteGames(
+                playnitePath=playnite_path,
+                onlyInstalled=config.playniteOnlyInstalled,
+                exportJsonPath=config.playniteExportJson
+            )
+            playniteEntries = formatPlayniteEntries(playnite_games)
+            logger.info(f"Loaded {len(playniteEntries)} installed games from Playnite.")
+        except Exception as e:
+            logger.warning(f"Error loading Playnite games: {e}")
+
+    # 3. Parse Local Shortcuts (.lnk, .url and Desktop)
+    linksList = preparelinksList(
+        config.foldersWithLinks, 
+        config.baseLinks,
+        includeDesktop=config.includeDesktop,
+        desktopPath=config.desktopPath
+    )
     
-    # Create game list from all sources
+    # 4. Aggregate ALL active sources: Local folders + eXoDOS (installed only) + Shortcuts + Playnite
     content = list(set(
         prepareContent(
-            __CONFIG__.gameFolders, 
-            __CONFIG__.gameCommonFolders, 
-            __CONFIG__.steamGameFolders, 
+            config.gameFolders, 
+            config.gameCommonFolders, 
             linksList,
-            steamGamesIds,
-            __CONFIG__.chooseNotInstalled,
-            __CONFIG__.removals,
-            __CONFIG__.endswith)
-        ))    
-    shuffle(content)
+            config.removals,
+            config.endswith,
+            exodosLocation=config.EXODOSLocation,
+            playniteEntries=playniteEntries,
+            metadataFolder=config.EXODOSMetadataFolder,
+            onlyInstalled=config.EXODOSOnlyInstalled
+        )
+    ))
 
-    # Writing files    
-    if __CONFIG__.createFiles:
-        writeListToFile(__CONFIG__.pathToSave + __CONFIG__.gamesFoundFileName, content)
-        writeTupleToFile(__CONFIG__.pathToSave + __CONFIG__.steamGamesOwnedFileName, steamGamesIds)
+    if not content:
+        print("No games found! Please check your choose_random_game.ini configuration.")
+        return
+
+    # 5. Write debug lists to disk if configured
+    if config.createFiles:
+        writeListToFile(config.pathToSave + config.gamesFoundFileName, content)
         
-    if __CONFIG__.importContentToDatabase:
+    # 6. Batch import games to database
+    if config.importContentToDatabase:
         importContentToDatabase(content)
 
-    choosedGame = chooseGame(content)
+    # 7. Initial random selection
+    choosedGame = chooseGame(content, sampleSize=config.randomSampleSize)
         
-    print("You have " + str(len(content)) + " games to play!")
-    print("CHOOSED -----------> " + choosedGame + " <-----------")
-    showChoosedGame(choosedGame, steamOwnedGames)
+    print("==================================================")
+    print(f"You have {len(content)} games to play!")
+    print(f"CHOSEN GAME -----------> {choosedGame} <-----------")
+    print("==================================================")
+
+    # 8. Sync GOTY collection with user's library
+    try:
+        syncGotyGames(content)
+    except Exception as e:
+        logger.warning(f"Error syncing GOTY database: {e}")
+
+    # 9. Display Modern Gaming Dashboard (with fallback to Tkinter if needed)
+    try:
+        from aesgard.dashboard import showDashboard
+        showDashboard(choosedGame, [], content, config)
+    except Exception as e:
+        logger.warning(f"Could not start PyQt6 Dashboard, using fallback UI: {e}")
+        showChoosedGame(choosedGame, [], content=content)
 
 if __name__ == '__main__':
     run(sys.argv)

@@ -1,0 +1,1843 @@
+# -*- coding: utf-8 -*-
+"""
+Modern Gaming Dashboard for Choose Random Game using PyQt6.
+Features:
+- Real-time library statistics (total games, sessions, backlog progress, favorites)
+- Hero section for random game picker with instant Reroll and category filtering
+- Interactive database explorer with instant search and status filtering
+- 'Game of the Day' (Jogo do Dia) strictly from installed games
+- 'GOTY (Game of the Year)' randomizer & historical Hall of Fame browser
+- Direct launch from database list, hero card, Game of the Day, or GOTY
+- Dark mode gaming aesthetics with sleek styling
+"""
+import os
+import sys
+import logging
+import random
+import webbrowser
+from PIL import Image
+
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QPushButton, QLineEdit, QComboBox, QTableWidget,
+    QTableWidgetItem, QHeaderView, QFrame, QSplitter, QMessageBox,
+    QStackedWidget, QButtonGroup, QProgressDialog, QCheckBox, QGridLayout
+)
+from PyQt6.QtCore import Qt, QSize, QTimer
+from PyQt6.QtGui import QFont, QPixmap, QImage, QColor, QIcon
+
+from aesgard.gameutil import (
+    executeGame, findGameIcon, chooseGame,
+    getGameOfTheDay, linkPrefix, exodosPrefix
+)
+from aesgard.playnite import PLAYNITE_PREFIX
+from aesgard.database import (
+    getDatabaseStats, getGamesList, setFinished, setFavorite,
+    findGameInfo, getRandomGoty, getAllGotys
+)
+from aesgard.ui import formatDisplayName, detectPlatform, getPlatformColor
+from aesgard.intel_dialog import GameIntelDialog
+from aesgard.streamer import LiveHistoryManager, StreamerOverlayWindow
+
+logger = logging.getLogger(__name__)
+
+# Dark Mode Modern QSS
+STYLESHEET = """
+QMainWindow {
+    background-color: #0d0f14;
+}
+
+QWidget {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    color: #e2e8f0;
+}
+
+/* Header & Stat Cards */
+QFrame#StatCard {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1a1e29, stop:1 #131722);
+    border: 1px solid #2a3142;
+    border-radius: 10px;
+    padding: 10px;
+}
+
+QLabel#StatValue {
+    font-size: 22px;
+    font-weight: bold;
+    color: #00cec9;
+}
+
+QLabel#StatLabel {
+    font-size: 11px;
+    color: #8c96a8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Nav Tabs */
+QPushButton.NavBtn {
+    background-color: #161a24;
+    border: 1px solid #2b3244;
+    border-radius: 8px;
+    color: #a0aec0;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 8px 18px;
+}
+QPushButton.NavBtn:hover {
+    background-color: #1f2533;
+    color: #ffffff;
+    border-color: #3e4a63;
+}
+QPushButton.NavBtn:checked {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0984e3, stop:1 #6c5ce7);
+    color: #ffffff;
+    border-color: #6c5ce7;
+}
+
+/* Hero Section */
+QFrame#HeroCard {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #181c26, stop:1 #12151d);
+    border: 1px solid #2b3244;
+    border-radius: 14px;
+    padding: 18px;
+}
+
+/* Game of the Day Card */
+QFrame#GotdCard {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1a2233, stop:1 #111520);
+    border: 1px solid #00cec9;
+    border-radius: 16px;
+    padding: 24px;
+}
+
+/* GOTY Card (Golden) */
+QFrame#GotyCard {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2c2214, stop:1 #16120d);
+    border: 1px solid #d4af37;
+    border-radius: 16px;
+    padding: 24px;
+}
+
+QLabel#GameTitle {
+    font-size: 18px;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+QLabel#PlatformBadge {
+    background-color: #2d3748;
+    color: #a0aec0;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+/* Buttons */
+QPushButton#BtnPlay {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00b894, stop:1 #00cec9);
+    color: #0d0f14;
+    font-size: 14px;
+    font-weight: bold;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 20px;
+}
+QPushButton#BtnPlay:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00c9a0, stop:1 #10dfda);
+}
+QPushButton#BtnPlay:pressed {
+    background: #00a885;
+}
+
+QPushButton#BtnReroll {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0984e3, stop:1 #6c5ce7);
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: bold;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+}
+QPushButton#BtnReroll:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1a92ec, stop:1 #7d6ef0);
+}
+
+QPushButton#BtnGoty {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #d4af37, stop:1 #f39c12);
+    color: #12100a;
+    font-size: 14px;
+    font-weight: bold;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 22px;
+}
+QPushButton#BtnGoty:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e5c158, stop:1 #f1c40f);
+}
+
+QPushButton#BtnSecondary {
+    background-color: #222734;
+    border: 1px solid #323b4f;
+    color: #cbd5e1;
+    font-size: 12px;
+    border-radius: 6px;
+    padding: 6px 12px;
+}
+QPushButton#BtnSecondary:hover {
+    background-color: #2a3142;
+    border-color: #4a5568;
+    color: #ffffff;
+}
+
+/* Inputs & Combos */
+QLineEdit {
+    background-color: #161a24;
+    border: 1px solid #2b3244;
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #ffffff;
+    font-size: 13px;
+}
+QLineEdit:focus {
+    border-color: #0984e3;
+}
+
+QComboBox {
+    background-color: #161a24;
+    border: 1px solid #2b3244;
+    border-radius: 6px;
+    padding: 6px 12px;
+    color: #cbd5e1;
+    font-size: 12px;
+}
+QComboBox::drop-down {
+    border: none;
+}
+QComboBox QAbstractItemView {
+    background-color: #1a1e29;
+    border: 1px solid #2a3142;
+    selection-background-color: #0984e3;
+    color: #ffffff;
+}
+
+/* Table Widget */
+QTableWidget {
+    background-color: #131720;
+    border: 1px solid #242b3b;
+    border-radius: 8px;
+    gridline-color: #1e2433;
+    font-size: 12px;
+}
+QTableWidget::item {
+    padding: 6px;
+    border-bottom: 1px solid #1a202d;
+}
+QTableWidget::item:selected {
+    background-color: #1e3a5f;
+    color: #ffffff;
+}
+QHeaderView::section {
+    background-color: #181d28;
+    color: #8c96a8;
+    padding: 8px;
+    border: none;
+    border-bottom: 2px solid #2a3142;
+    font-weight: bold;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+/* Scrollbars */
+QScrollBar:vertical {
+    background: #11131a;
+    width: 10px;
+    margin: 0px;
+}
+QScrollBar::handle:vertical {
+    background: #2b3244;
+    min-height: 20px;
+    border-radius: 5px;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+/* Dialogs & MessageBoxes (Dark Mode Contrast) */
+QDialog, QMessageBox, QProgressDialog {
+    background-color: #12151d;
+    color: #e2e8f0;
+}
+QMessageBox QLabel, QProgressDialog QLabel {
+    color: #e2e8f0;
+    font-size: 13px;
+    background-color: transparent;
+}
+QMessageBox QPushButton, QProgressDialog QPushButton {
+    background-color: #222734;
+    border: 1px solid #323b4f;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 6px 18px;
+    min-width: 80px;
+}
+QMessageBox QPushButton:hover, QProgressDialog QPushButton:hover {
+    background-color: #2a3142;
+    border-color: #0984e3;
+    color: #ffffff;
+}
+QMessageBox QPushButton:pressed, QProgressDialog QPushButton:pressed {
+    background-color: #1a1e29;
+}
+
+QProgressBar {
+    background-color: #161a24;
+    border: 1px solid #2b3244;
+    border-radius: 6px;
+    text-align: center;
+    color: #ffffff;
+    font-weight: bold;
+}
+QProgressBar::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00b894, stop:1 #00cec9);
+    border-radius: 5px;
+}
+"""
+
+def detectPlatform(rawName):
+    """Detects the platform/source of a game entry."""
+    if rawName.startswith(PLAYNITE_PREFIX):
+        return "Playnite"
+    elif rawName.startswith("steam:"):
+        return "Steam"
+    elif rawName.startswith(exodosPrefix) or "exodos" in rawName.lower():
+        return "eXoDOS"
+    elif rawName.startswith(linkPrefix):
+        return "Atalho / Desktop"
+    elif "dosbox" in rawName.lower():
+        return "DOSBox"
+    elif rawName.startswith("gog:"):
+        return "GOG"
+    else:
+        return "Instalação Local"
+
+def getPlatformColor(platform):
+    """Returns a distinct badge color for each platform."""
+    colors = {
+        "Steam": "#1b2838",
+        "eXoDOS": "#744210",
+        "Playnite": "#ff6b6b",
+        "Atalho / Desktop": "#2c3e50",
+        "DOSBox": "#4a5568",
+        "GOG": "#4b1e78",
+        "Instalação Local": "#1a365d"
+    }
+    return colors.get(platform, "#2d3748")
+
+class GamingDashboard(QMainWindow):
+    def __init__(self, content, initialChoice, steamOwnedGames, config):
+        super().__init__()
+        # Store configuration right at the beginning
+        self.config = config
+        self.content = content
+        self.currentChoice = initialChoice
+        self.steamOwnedGames = steamOwnedGames
+        self.currentGotd = None
+        self.currentGoty = None
+        self.liveHistoryMgr = LiveHistoryManager(dbPath=getattr(self.config, 'DatabaseName', 'Games.db'))
+        self.overlayWindow = None
+        self._rouletteTimer = None
+        self.chatChoiceTrio = []
+
+        self.setWindowTitle("Choose Random Game - Gaming Dashboard & Live Stream Assistant")
+        w = getattr(self.config, 'uiWindowWidth', 1180)
+        h = getattr(self.config, 'uiWindowHeight', 740)
+        min_w = getattr(self.config, 'uiMinWidth', 960)
+        min_h = getattr(self.config, 'uiMinHeight', 600)
+        self.resize(w, h)
+        self.setMinimumSize(min_w, min_h)
+        self.setStyleSheet(STYLESHEET)
+
+        # Main Central Container
+        centralWidget = QWidget()
+        self.setCentralWidget(centralWidget)
+        self.mainLayout = QVBoxLayout(centralWidget)
+        self.mainLayout.setContentsMargins(20, 20, 20, 20)
+        self.mainLayout.setSpacing(14)
+
+        # 1. Top Bar: Title, Clean Button, and Stat Cards
+        self.buildHeaderSection()
+
+        # 2. Navigation Bar (Tabs: Sorteador Geral, Jogo do Dia, GOTY, Escolha do Chat, Histórico de Lives)
+        self.buildNavBar()
+
+        # 3. Stacked Container for Views
+        self.stack = QStackedWidget()
+        self.mainLayout.addWidget(self.stack, 1)
+
+        # View 0: Sorteador Geral & Explorador do Banco
+        self.viewMain = self.buildMainView()
+        self.stack.addWidget(self.viewMain)
+
+        # View 1: Jogo do Dia (Game of the Day)
+        self.viewGotd = self.buildGotdView()
+        self.stack.addWidget(self.viewGotd)
+
+        # View 2: Jogo do Ano (GOTY)
+        self.viewGoty = self.buildGotyView()
+        self.stack.addWidget(self.viewGoty)
+
+        # View 3: Escolha do Chat (Sorteio Triplo para Enquete do YouTube)
+        self.viewChatChoice = self.buildChatChoiceView()
+        self.stack.addWidget(self.viewChatChoice)
+
+        # View 4: Histórico de Lives Anteriores
+        self.viewLiveHistory = self.buildLiveHistoryView()
+        self.stack.addWidget(self.viewLiveHistory)
+
+        # Load Initial Data
+        self.updateHeroDisplay(self.currentChoice)
+        self.refreshStats()
+        self.refreshTable()
+        self.onRerollGotd(initial=True)
+        self.onRerollGoty()
+
+        # Center Window
+        self.centerOnScreen()
+
+    def centerOnScreen(self):
+        screen = QApplication.primaryScreen().geometry()
+        x = (screen.width() - self.width()) // 2
+        y = (screen.height() - self.height()) // 2
+        self.move(x, y)
+
+    # -------------------------------------------------------------
+    # 1. Header & Stats Section
+    # -------------------------------------------------------------
+    def buildHeaderSection(self):
+        headerLayout = QHBoxLayout()
+        headerLayout.setSpacing(14)
+
+        # App Title & Subtitle
+        titleBox = QVBoxLayout()
+        titleLabel = QLabel("🎮 CHOOSE RANDOM GAME")
+        titleLabel.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        titleLabel.setStyleSheet("color: #ffffff; letter-spacing: 1px;")
+        
+        subtitleLabel = QLabel("Gaming Backlog, Jogo do Dia & Intelligent Random Launcher")
+        subtitleLabel.setFont(QFont("Segoe UI", 9))
+        subtitleLabel.setStyleSheet("color: #8c96a8;")
+        
+        titleBox.addWidget(titleLabel)
+        titleBox.addWidget(subtitleLabel)
+        headerLayout.addLayout(titleBox)
+
+        # Clean Database Button
+        self.btnCleanDb = QPushButton("🧹 Limpar Banco")
+        self.btnCleanDb.setObjectName("BtnSecondary")
+        self.btnCleanDb.setToolTip("Verifica jogos desinstalados no disco e limpa registros órfãos sem apagar arquivos")
+        self.btnCleanDb.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnCleanDb.clicked.connect(self.onCleanDatabase)
+        headerLayout.addWidget(self.btnCleanDb)
+
+        headerLayout.addStretch()
+
+        # 4 Stat Cards
+        self.statTotal = self.createStatCard("17.800+", "CATÁLOGO")
+        self.statPlayed = self.createStatCard("0", "SESSÕES")
+        self.statFinished = self.createStatCard("0", "ZERADOS")
+        self.statBacklog = self.createStatCard("0%", "CONCLUÍDO")
+
+        headerLayout.addWidget(self.statTotal)
+        headerLayout.addWidget(self.statPlayed)
+        headerLayout.addWidget(self.statFinished)
+        headerLayout.addWidget(self.statBacklog)
+
+        self.mainLayout.addLayout(headerLayout)
+
+    def createStatCard(self, initialValue, labelText):
+        card = QFrame()
+        card.setObjectName("StatCard")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(14, 8, 14, 8)
+        layout.setSpacing(2)
+
+        valLabel = QLabel(initialValue)
+        valLabel.setObjectName("StatValue")
+        valLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        descLabel = QLabel(labelText)
+        descLabel.setObjectName("StatLabel")
+        descLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        layout.addWidget(valLabel)
+        layout.addWidget(descLabel)
+        return card
+
+    # -------------------------------------------------------------
+    # 2. Navigation Bar
+    # -------------------------------------------------------------
+    def buildNavBar(self):
+        navLayout = QHBoxLayout()
+        navLayout.setSpacing(10)
+
+        self.btnNavMain = QPushButton("🎲 Sorteador & Explorador")
+        self.btnNavMain.setProperty("class", "NavBtn")
+        self.btnNavMain.setCheckable(True)
+        self.btnNavMain.setChecked(True)
+        self.btnNavMain.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnNavMain.clicked.connect(lambda: self.switchView(0))
+
+        self.btnNavGotd = QPushButton("🌟 Jogo do Dia (Apenas Instalados)")
+        self.btnNavGotd.setProperty("class", "NavBtn")
+        self.btnNavGotd.setCheckable(True)
+        self.btnNavGotd.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnNavGotd.clicked.connect(lambda: self.switchView(1))
+
+        self.btnNavGoty = QPushButton("🏆 Jogos do Ano (GOTY - Todos)")
+        self.btnNavGoty.setProperty("class", "NavBtn")
+        self.btnNavGoty.setCheckable(True)
+        self.btnNavGoty.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnNavGoty.clicked.connect(lambda: self.switchView(2))
+
+        self.btnNavChatChoice = QPushButton("🗳️ Escolha do Chat (Trio)")
+        self.btnNavChatChoice.setProperty("class", "NavBtn")
+        self.btnNavChatChoice.setCheckable(True)
+        self.btnNavChatChoice.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnNavChatChoice.clicked.connect(lambda: self.switchView(3))
+
+        self.btnNavLiveHistory = QPushButton("📜 Histórico de Lives")
+        self.btnNavLiveHistory.setProperty("class", "NavBtn")
+        self.btnNavLiveHistory.setCheckable(True)
+        self.btnNavLiveHistory.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnNavLiveHistory.clicked.connect(lambda: self.switchView(4))
+
+        self.navGroup = QButtonGroup(self)
+        self.navGroup.addButton(self.btnNavMain)
+        self.navGroup.addButton(self.btnNavGotd)
+        self.navGroup.addButton(self.btnNavGoty)
+        self.navGroup.addButton(self.btnNavChatChoice)
+        self.navGroup.addButton(self.btnNavLiveHistory)
+
+        navLayout.addWidget(self.btnNavMain)
+        navLayout.addWidget(self.btnNavGotd)
+        navLayout.addWidget(self.btnNavGoty)
+        navLayout.addWidget(self.btnNavChatChoice)
+        navLayout.addWidget(self.btnNavLiveHistory)
+        navLayout.addStretch()
+
+        # Streamer & OBS Controls
+        self.chkRoulette = QCheckBox("🎰 Roleta Live")
+        self.chkRoulette.setChecked(getattr(self.config, 'streamerRouletteEnabled', True))
+        self.chkRoulette.setToolTip("Ativa o efeito visual de slot machine/roleta com suspense antes de revelar o jogo")
+        self.chkRoulette.setStyleSheet("color: #00cec9; font-weight: bold; font-size: 11px;")
+        navLayout.addWidget(self.chkRoulette)
+
+        self.btnObsOverlay = QPushButton("🎥 Overlay OBS")
+        self.btnObsOverlay.setObjectName("BtnSecondary")
+        self.btnObsOverlay.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnObsOverlay.setToolTip("Abre uma janela limpa com capa e título para captura direta de janela no OBS Studio")
+        self.btnObsOverlay.clicked.connect(self.onOpenObsOverlay)
+        navLayout.addWidget(self.btnObsOverlay)
+
+        self.mainLayout.addLayout(navLayout)
+
+    def switchView(self, index):
+        self.stack.setCurrentIndex(index)
+        if index == 0:
+            self.btnNavMain.setChecked(True)
+        elif index == 1:
+            self.btnNavGotd.setChecked(True)
+        elif index == 2:
+            self.btnNavGoty.setChecked(True)
+            self.refreshGotyTable()
+        elif index == 3:
+            self.btnNavChatChoice.setChecked(True)
+            if not self.chatChoiceTrio:
+                self.onRerollChatChoice()
+        elif index == 4:
+            self.btnNavLiveHistory.setChecked(True)
+            self.refreshLiveHistoryTable()
+
+    # -------------------------------------------------------------
+    # 3. View 0: Sorteador Geral & Explorador do Banco
+    # -------------------------------------------------------------
+    def buildMainView(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+
+        # Quick Live Themes Bar
+        themeRow = QHBoxLayout()
+        themeRow.setSpacing(8)
+        themeLbl = QLabel("🎯 TEMA DA LIVE:")
+        themeLbl.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+        themeLbl.setStyleSheet("color: #00cec9; letter-spacing: 1px;")
+        themeRow.addWidget(themeLbl)
+
+        themes = [
+            ("🌟 Todos", "all"),
+            ("🆕 Backlog Zero (0x)", "backlog"),
+            ("🕹️ Só Retrô (eXoDOS)", "retro"),
+            ("🚀 Só Modernos (Steam/Playnite)", "modern"),
+            ("⭐ Favoritos", "favorites")
+        ]
+        for t_label, t_mode in themes:
+            btn = QPushButton(t_label)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #161a24;
+                    border: 1px solid #2b3244;
+                    border-radius: 6px;
+                    padding: 5px 12px;
+                    font-size: 11px;
+                    font-weight: bold;
+                    color: #cbd5e1;
+                }
+                QPushButton:hover {
+                    background-color: #222938;
+                    border-color: #00cec9;
+                    color: #ffffff;
+                }
+            """)
+            btn.clicked.connect(lambda _, m=t_mode: self.onApplyLiveTheme(m))
+            themeRow.addWidget(btn)
+
+        themeRow.addStretch()
+        layout.addLayout(themeRow)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(8)
+
+        heroContainer = self.buildHeroCard()
+        splitter.addWidget(heroContainer)
+
+        browserContainer = self.buildDatabaseBrowser()
+        splitter.addWidget(browserContainer)
+
+        splitter.setSizes([460, 680])
+        layout.addWidget(splitter)
+        return widget
+
+    def buildHeroCard(self):
+        card = QFrame()
+        card.setObjectName("HeroCard")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        # Section Header
+        heroHeader = QHBoxLayout()
+        headerText = QLabel("🎯 JOGO SORTEADO")
+        headerText.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        headerText.setStyleSheet("color: #00cec9; letter-spacing: 1px;")
+        
+        self.platformBadge = QLabel("LOCAL")
+        self.platformBadge.setObjectName("PlatformBadge")
+        
+        heroHeader.addWidget(headerText)
+        heroHeader.addStretch()
+        heroHeader.addWidget(self.platformBadge)
+        layout.addLayout(heroHeader)
+
+        # Cover Image Box
+        imgFrame = QFrame()
+        imgFrame.setStyleSheet("background-color: #0d0f14; border: 1px solid #242b3b; border-radius: 10px;")
+        imgLayout = QVBoxLayout(imgFrame)
+        imgLayout.setContentsMargins(6, 6, 6, 6)
+
+        self.imageLabel = QLabel()
+        self.imageLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        cover_w = getattr(self.config, 'uiCoverWidth', 160)
+        cover_h = getattr(self.config, 'uiCoverHeight', 160)
+        self.imageLabel.setFixedSize(cover_w, cover_h)
+        imgLayout.addWidget(self.imageLabel, 0, Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(imgFrame, 0, Qt.AlignmentFlag.AlignCenter)
+
+        # Game Title
+        self.gameTitleLabel = QLabel("Nome do Jogo")
+        self.gameTitleLabel.setObjectName("GameTitle")
+        self.gameTitleLabel.setWordWrap(True)
+        self.gameTitleLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.gameTitleLabel)
+
+        # Game Stats Row
+        self.gameStatsLabel = QLabel("Vezes jogado: 0 • Status: Em aberto")
+        self.gameStatsLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.gameStatsLabel.setStyleSheet("color: #8c96a8; font-size: 12px;")
+        layout.addWidget(self.gameStatsLabel)
+
+        layout.addSpacing(4)
+
+        # Big Play Button
+        self.btnPlay = QPushButton("▶  JOGAR AGORA")
+        self.btnPlay.setObjectName("BtnPlay")
+        self.btnPlay.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnPlay.clicked.connect(self.onPlayHero)
+        layout.addWidget(self.btnPlay)
+
+        # Reroll Button
+        self.btnReroll = QPushButton("🎲  SORTEAR NOVO JOGO (REROLL)")
+        self.btnReroll.setObjectName("BtnReroll")
+        self.btnReroll.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnReroll.clicked.connect(self.onRerollHero)
+        layout.addWidget(self.btnReroll)
+
+        # Intel & Streamer Actions
+        intelRow = QHBoxLayout()
+        intelRow.setSpacing(8)
+
+        self.btnHeroIntel = QPushButton("ℹ️ Guia, Detonados & Dicas")
+        self.btnHeroIntel.setObjectName("BtnSecondary")
+        self.btnHeroIntel.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnHeroIntel.setToolTip("Abre central com sinopse, tempo de HowLongToBeat, GameFAQs e detonados")
+        self.btnHeroIntel.clicked.connect(self.onOpenHeroIntel)
+
+        self.btnRecordHeroLive = QPushButton("🔴 Gravar na Live")
+        self.btnRecordHeroLive.setObjectName("BtnSecondary")
+        self.btnRecordHeroLive.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnRecordHeroLive.setToolTip("Registra este jogo no histórico de transmissões ao vivo do seu canal")
+        self.btnRecordHeroLive.clicked.connect(self.onRecordCurrentHeroLive)
+
+        intelRow.addWidget(self.btnHeroIntel)
+        intelRow.addWidget(self.btnRecordHeroLive)
+        layout.addLayout(intelRow)
+
+        # Filter Category for Reroll
+        filterRow = QHBoxLayout()
+        filterLbl = QLabel("Filtrar sorteio:")
+        filterLbl.setStyleSheet("color: #8c96a8; font-size: 11px;")
+        
+        self.comboRerollFilter = QComboBox()
+        self.comboRerollFilter.addItems([
+            "Todas as Fontes",
+            "Apenas eXoDOS (Instalados)",
+            "Apenas Atalhos / Desktop",
+            "Apenas Pastas Locais",
+            "Apenas Playnite (Steam, GOG, Epic)"
+        ])
+        self.comboRerollFilter.currentIndexChanged.connect(self.onRerollHero)
+        filterRow.addWidget(filterLbl)
+        filterRow.addWidget(self.comboRerollFilter, 1)
+        layout.addLayout(filterRow)
+
+        layout.addStretch()
+
+        # Action Buttons (Favorite / Finish)
+        actionsRow = QHBoxLayout()
+        self.btnFavorite = QPushButton("⭐ Favoritar")
+        self.btnFavorite.setObjectName("BtnSecondary")
+        self.btnFavorite.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnFavorite.clicked.connect(self.onToggleFavorite)
+
+        self.btnFinish = QPushButton("✔ Marcar Zerado")
+        self.btnFinish.setObjectName("BtnSecondary")
+        self.btnFinish.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnFinish.clicked.connect(self.onToggleFinished)
+
+        actionsRow.addWidget(self.btnFavorite)
+        actionsRow.addWidget(self.btnFinish)
+        layout.addLayout(actionsRow)
+
+        return card
+
+
+    def buildDatabaseBrowser(self):
+        container = QFrame()
+        container.setStyleSheet("background-color: #12151d; border: 1px solid #242b3b; border-radius: 14px; padding: 14px;")
+        layout = QVBoxLayout(container)
+        layout.setSpacing(10)
+
+        # Header with Search and Filter
+        topRow = QHBoxLayout()
+        
+        browserTitle = QLabel("📚 EXPLORADOR DO BANCO")
+        browserTitle.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        browserTitle.setStyleSheet("color: #ffffff; letter-spacing: 1px;")
+        topRow.addWidget(browserTitle)
+        topRow.addStretch()
+
+        # Search Bar
+        self.searchBox = QLineEdit()
+        self.searchBox.setPlaceholderText("🔍 Buscar jogo pelo título...")
+        self.searchBox.setFixedWidth(230)
+        self.searchBox.textChanged.connect(self.onSearchChanged)
+        topRow.addWidget(self.searchBox)
+
+        # Filter Dropdown
+        self.filterCombo = QComboBox()
+        self.filterCombo.addItems(["Todos", "Não Jogados", "Zerados", "Favoritos"])
+        self.filterCombo.currentIndexChanged.connect(self.onFilterChanged)
+        topRow.addWidget(self.filterCombo)
+
+        layout.addLayout(topRow)
+
+        # Table Widget
+        self.table = QTableWidget()
+        self.table.setColumnCount(5)
+        self.table.setHorizontalHeaderLabels(["Jogo / Título", "Origem", "Vezes", "Último Acesso", "Status"])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.doubleClicked.connect(self.onTableDoubleClicked)
+        layout.addWidget(self.table, 1)
+
+        # Bottom Actions for Selected Table Game
+        botRow = QHBoxLayout()
+        hintLabel = QLabel("💡 Dica: Dê duplo clique em qualquer linha para jogar imediatamente")
+        hintLabel.setStyleSheet("color: #718096; font-size: 11px;")
+        botRow.addWidget(hintLabel)
+        botRow.addStretch()
+
+        self.btnPlaySelected = QPushButton("▶ Jogar Selecionado")
+        self.btnPlaySelected.setObjectName("BtnSecondary")
+        self.btnPlaySelected.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnPlaySelected.clicked.connect(self.onPlaySelected)
+        botRow.addWidget(self.btnPlaySelected)
+
+        layout.addLayout(botRow)
+        return container
+
+    # -------------------------------------------------------------
+    # 4. View 1: Jogo do Dia (Game of the Day)
+    # -------------------------------------------------------------
+    def buildGotdView(self):
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        card = QFrame()
+        card.setObjectName("GotdCard")
+        card.setFixedWidth(640)
+        cardLayout = QVBoxLayout(card)
+        cardLayout.setContentsMargins(30, 24, 30, 24)
+        cardLayout.setSpacing(14)
+
+        # Header tag
+        tagRow = QHBoxLayout()
+        tagLabel = QLabel("🌟 RECOMENDAÇÃO DO DIA • 100% INSTALADO NO SEU PC")
+        tagLabel.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        tagLabel.setStyleSheet("color: #00cec9; letter-spacing: 1px;")
+        tagRow.addWidget(tagLabel)
+        tagRow.addStretch()
+
+        self.gotdPlatformBadge = QLabel("LOCAL")
+        self.gotdPlatformBadge.setObjectName("PlatformBadge")
+        tagRow.addWidget(self.gotdPlatformBadge)
+        cardLayout.addLayout(tagRow)
+
+        # Image cover
+        imgFrame = QFrame()
+        imgFrame.setStyleSheet("background-color: #0d0f14; border: 1px solid #242b3b; border-radius: 12px;")
+        imgLayout = QVBoxLayout(imgFrame)
+        imgLayout.setContentsMargins(8, 8, 8, 8)
+
+        self.gotdImageLabel = QLabel()
+        self.gotdImageLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.gotdImageLabel.setFixedSize(180, 180)
+        imgLayout.addWidget(self.gotdImageLabel, 0, Qt.AlignmentFlag.AlignCenter)
+        cardLayout.addWidget(imgFrame, 0, Qt.AlignmentFlag.AlignCenter)
+
+        # Title
+        self.gotdTitleLabel = QLabel("Título do Jogo do Dia")
+        self.gotdTitleLabel.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
+        self.gotdTitleLabel.setStyleSheet("color: #ffffff;")
+        self.gotdTitleLabel.setWordWrap(True)
+        self.gotdTitleLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        cardLayout.addWidget(self.gotdTitleLabel)
+
+        # Stats
+        self.gotdStatsLabel = QLabel("Vezes jogado: 0 • Status: Em aberto")
+        self.gotdStatsLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.gotdStatsLabel.setStyleSheet("color: #a0aec0; font-size: 13px;")
+        cardLayout.addWidget(self.gotdStatsLabel)
+
+        cardLayout.addSpacing(10)
+
+        # Big Play Button
+        self.btnGotdPlay = QPushButton("▶  JOGAR JOGO DO DIA AGORA")
+        self.btnGotdPlay.setObjectName("BtnPlay")
+        self.btnGotdPlay.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnGotdPlay.clicked.connect(self.onPlayGotd)
+        cardLayout.addWidget(self.btnGotdPlay)
+
+        # Reroll Button
+        self.btnGotdReroll = QPushButton("🎲  SORTEAR OUTRA RECOMENDAÇÃO DO DIA")
+        self.btnGotdReroll.setObjectName("BtnReroll")
+        self.btnGotdReroll.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnGotdReroll.clicked.connect(lambda: self.onRerollGotd(initial=False))
+        cardLayout.addWidget(self.btnGotdReroll)
+
+        # Intel & Guides Button
+        self.btnGotdIntel = QPushButton("ℹ️  Guia, Detonados & Dicas deste Jogo")
+        self.btnGotdIntel.setObjectName("BtnSecondary")
+        self.btnGotdIntel.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnGotdIntel.clicked.connect(self.onOpenGotdIntel)
+        cardLayout.addWidget(self.btnGotdIntel)
+
+        layout.addWidget(card, 0, Qt.AlignmentFlag.AlignCenter)
+        return container
+
+    # -------------------------------------------------------------
+    # 5. View 2: Jogos do Ano (GOTY Hall of Fame)
+    # -------------------------------------------------------------
+    def buildGotyView(self):
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(14)
+
+        # Upper Card: Random GOTY Spotlight
+        card = QFrame()
+        card.setObjectName("GotyCard")
+        cardLayout = QVBoxLayout(card)
+        cardLayout.setContentsMargins(22, 18, 22, 18)
+        cardLayout.setSpacing(10)
+
+        # Year & Tag Row
+        topRow = QHBoxLayout()
+        self.gotyYearBadge = QLabel("🏆 GAME OF THE YEAR - ANO 2024")
+        self.gotyYearBadge.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        self.gotyYearBadge.setStyleSheet("color: #d4af37; letter-spacing: 1px;")
+        topRow.addWidget(self.gotyYearBadge)
+        topRow.addStretch()
+
+        self.gotyInstalledBadge = QLabel("NÃO INSTALADO")
+        self.gotyInstalledBadge.setObjectName("PlatformBadge")
+        topRow.addWidget(self.gotyInstalledBadge)
+        cardLayout.addLayout(topRow)
+
+        # Content Row (Cover Image + Details)
+        contentRow = QHBoxLayout()
+        contentRow.setSpacing(20)
+
+        # Cover Frame
+        imgFrame = QFrame()
+        imgFrame.setStyleSheet("background-color: #0d0f14; border: 1px solid #242b3b; border-radius: 12px;")
+        imgLayout = QVBoxLayout(imgFrame)
+        imgLayout.setContentsMargins(6, 6, 6, 6)
+
+        self.gotyImageLabel = QLabel()
+        self.gotyImageLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.gotyImageLabel.setFixedSize(160, 160)
+        imgLayout.addWidget(self.gotyImageLabel, 0, Qt.AlignmentFlag.AlignCenter)
+        contentRow.addWidget(imgFrame, 0, Qt.AlignmentFlag.AlignTop)
+
+        # Details Column
+        detailsCol = QVBoxLayout()
+        detailsCol.setSpacing(6)
+
+        # Title & Developer
+        self.gotyTitleLabel = QLabel("Astro Bot")
+        self.gotyTitleLabel.setFont(QFont("Segoe UI", 20, QFont.Weight.Bold))
+        self.gotyTitleLabel.setStyleSheet("color: #ffffff;")
+        detailsCol.addWidget(self.gotyTitleLabel)
+
+        self.gotyMetaLabel = QLabel("Team Asobi • Plataforma 3D • The Game Awards (GOTY), Golden Joystick")
+        self.gotyMetaLabel.setStyleSheet("color: #e5c158; font-size: 13px; font-weight: bold;")
+        detailsCol.addWidget(self.gotyMetaLabel)
+
+        self.gotySummaryLabel = QLabel("Uma celebração vibrante e criativa da história dos videogames...")
+        self.gotySummaryLabel.setWordWrap(True)
+        self.gotySummaryLabel.setStyleSheet("color: #cbd5e1; font-size: 13px; line-height: 1.4;")
+        detailsCol.addWidget(self.gotySummaryLabel)
+
+        gotyHint = QLabel("💡 O sorteio de GOTY abrange todos os vencedores oficiais da história (instalados ou não). Se você o tiver instalado, poderá jogá-lo imediatamente!")
+        gotyHint.setStyleSheet("color: #8c96a8; font-size: 11px; font-style: italic;")
+        detailsCol.addWidget(gotyHint)
+
+        contentRow.addLayout(detailsCol, 1)
+        cardLayout.addLayout(contentRow)
+
+        # Buttons
+        btnRow = QHBoxLayout()
+        btnRow.setSpacing(10)
+
+        self.btnGotyPlay = QPushButton("▶  JOGAR GOTY INSTALADO")
+        self.btnGotyPlay.setObjectName("BtnGoty")
+        self.btnGotyPlay.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnGotyPlay.clicked.connect(self.onPlayGoty)
+        btnRow.addWidget(self.btnGotyPlay)
+
+        self.btnGotyIntel = QPushButton("ℹ️ Detonados & Guia")
+        self.btnGotyIntel.setObjectName("BtnSecondary")
+        self.btnGotyIntel.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnGotyIntel.clicked.connect(self.onOpenGotyIntel)
+        btnRow.addWidget(self.btnGotyIntel)
+
+        self.btnGotyExplore = QPushButton("🌐 Loja / Google")
+        self.btnGotyExplore.setObjectName("BtnSecondary")
+        self.btnGotyExplore.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnGotyExplore.clicked.connect(self.onExploreGoty)
+        btnRow.addWidget(self.btnGotyExplore)
+
+        self.btnGotyReroll = QPushButton("🎲 Sortear Outro GOTY")
+        self.btnGotyReroll.setObjectName("BtnReroll")
+        self.btnGotyReroll.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnGotyReroll.clicked.connect(self.onRerollGoty)
+        btnRow.addWidget(self.btnGotyReroll)
+
+
+        btnRow.addStretch()
+        cardLayout.addLayout(btnRow)
+        layout.addWidget(card)
+
+        # Lower Table: Full GOTY History
+        tableContainer = QFrame()
+        tableContainer.setStyleSheet("background-color: #12151d; border: 1px solid #242b3b; border-radius: 12px; padding: 12px;")
+        tLayout = QVBoxLayout(tableContainer)
+        tLayout.setSpacing(8)
+
+        tHeader = QHBoxLayout()
+        tTitle = QLabel("🏛️ HALL DA FAMA DOS VENCEDORES DO GOTY (1983 - 2025)")
+        tTitle.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        tTitle.setStyleSheet("color: #d4af37; letter-spacing: 1px;")
+        tHeader.addWidget(tTitle)
+        tHeader.addStretch()
+
+        self.gotySearchBox = QLineEdit()
+        self.gotySearchBox.setPlaceholderText("🔍 Filtrar vencedores por nome ou ano...")
+        self.gotySearchBox.setFixedWidth(280)
+        self.gotySearchBox.textChanged.connect(self.onGotySearchChanged)
+        tHeader.addWidget(self.gotySearchBox)
+        tLayout.addLayout(tHeader)
+
+        self.gotyTable = QTableWidget()
+        self.gotyTable.setColumnCount(6)
+        self.gotyTable.setHorizontalHeaderLabels(["Ano", "Título do GOTY", "Desenvolvedora / Estúdio", "Gênero", "Premiações Principais", "No Seu PC?"])
+        self.gotyTable.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.gotyTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.gotyTable.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.gotyTable.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.gotyTable.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self.gotyTable.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        
+        self.gotyTable.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.gotyTable.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.gotyTable.doubleClicked.connect(self.onGotyTableDoubleClicked)
+        tLayout.addWidget(self.gotyTable, 1)
+
+        layout.addWidget(tableContainer, 1)
+        return container
+
+    # -------------------------------------------------------------
+    # 6. View 3: Escolha do Chat (Sorteio Triplo para Enquete do YouTube)
+    # -------------------------------------------------------------
+    def buildChatChoiceView(self):
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(14)
+
+        # Header Bar
+        header = QHBoxLayout()
+        hTitle = QLabel("🗳️ ESCOLHA DO CHAT • ENQUETE AO VIVO DO YOUTUBE")
+        hTitle.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        hTitle.setStyleSheet("color: #00cec9; letter-spacing: 1px;")
+        header.addWidget(hTitle)
+        header.addStretch()
+
+        self.btnCopyPoll = QPushButton("📋 Copiar Enquete para o Chat")
+        self.btnCopyPoll.setObjectName("BtnSecondary")
+        self.btnCopyPoll.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnCopyPoll.setToolTip("Copia o texto formatado das 3 opções para abrir a enquete no chat da live")
+        self.btnCopyPoll.clicked.connect(self.onCopyChatPoll)
+        header.addWidget(self.btnCopyPoll)
+
+        self.btnRerollTrio = QPushButton("🎲 Sortear 3 Novas Opções")
+        self.btnRerollTrio.setObjectName("BtnReroll")
+        self.btnRerollTrio.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnRerollTrio.clicked.connect(self.onRerollChatChoice)
+        header.addWidget(self.btnRerollTrio)
+        layout.addLayout(header)
+
+        hint = QLabel("💡 Sorteie 3 jogos distintos instalados no seu PC. Abra a enquete na sua live do YouTube e clique em 'JOGAR' na opção mais votada pelo seu público!")
+        hint.setStyleSheet("color: #8c96a8; font-size: 11px; font-style: italic;")
+        layout.addWidget(hint)
+
+        # 3 Cards Container
+        self.trioContainer = QHBoxLayout()
+        self.trioContainer.setSpacing(16)
+        self.trioCards = []
+
+        labels = [("OPÇÃO A", "#00cec9"), ("OPÇÃO B", "#fdcb6e"), ("OPÇÃO C", "#e17055")]
+        for i, (opt_name, color) in enumerate(labels):
+            card = QFrame()
+            card.setStyleSheet(f"background-color: #12151d; border: 2px solid {color}; border-radius: 14px; padding: 14px;")
+            cLayout = QVBoxLayout(card)
+            cLayout.setSpacing(10)
+
+            # Option Badge
+            optBadge = QLabel(opt_name)
+            optBadge.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+            optBadge.setStyleSheet(f"background-color: {color}; color: #0d0f14; border-radius: 6px; padding: 4px 12px; font-weight: bold;")
+            optBadge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            cLayout.addWidget(optBadge)
+
+            # Cover Box
+            imgFrame = QFrame()
+            imgFrame.setStyleSheet("background-color: #0d0f14; border: 1px solid #242b3b; border-radius: 10px;")
+            imgLayout = QVBoxLayout(imgFrame)
+            imgLayout.setContentsMargins(6, 6, 6, 6)
+
+            coverLabel = QLabel()
+            coverLabel.setFixedSize(160, 160)
+            coverLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            imgLayout.addWidget(coverLabel, 0, Qt.AlignmentFlag.AlignCenter)
+            cLayout.addWidget(imgFrame, 0, Qt.AlignmentFlag.AlignCenter)
+
+            # Title
+            titleLabel = QLabel("Aguardando sorteio...")
+            titleLabel.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+            titleLabel.setStyleSheet("color: #ffffff;")
+            titleLabel.setWordWrap(True)
+            titleLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            cLayout.addWidget(titleLabel)
+
+            # Platform & Stats
+            metaLabel = QLabel("Pronto para rodar")
+            metaLabel.setFont(QFont("Segoe UI", 11))
+            metaLabel.setStyleSheet("color: #a0aec0;")
+            metaLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            cLayout.addWidget(metaLabel)
+
+            cLayout.addStretch()
+
+            # Play Button (Winner)
+            btnPlayOpt = QPushButton(f"▶ JOGAR {opt_name} (Vencedor)")
+            btnPlayOpt.setObjectName("BtnPlay")
+            btnPlayOpt.setCursor(Qt.CursorShape.PointingHandCursor)
+            btnPlayOpt.clicked.connect(lambda _, idx=i: self.onPlayChatChoice(idx))
+            cLayout.addWidget(btnPlayOpt)
+
+            # Intel Button
+            btnIntelOpt = QPushButton("ℹ️ Guia & Dicas")
+            btnIntelOpt.setObjectName("BtnSecondary")
+            btnIntelOpt.setCursor(Qt.CursorShape.PointingHandCursor)
+            btnIntelOpt.clicked.connect(lambda _, idx=i: self.onOpenChatChoiceIntel(idx))
+            cLayout.addWidget(btnIntelOpt)
+
+            self.trioContainer.addWidget(card)
+            self.trioCards.append({
+                "card": card,
+                "coverLabel": coverLabel,
+                "titleLabel": titleLabel,
+                "metaLabel": metaLabel,
+                "gameEntry": ""
+            })
+
+        layout.addLayout(self.trioContainer, 1)
+        return container
+
+    # -------------------------------------------------------------
+    # 7. View 4: Histórico de Lives Anteriores
+    # -------------------------------------------------------------
+    def buildLiveHistoryView(self):
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        # Header Bar
+        topBar = QHBoxLayout()
+        hTitle = QLabel("📜 HISTÓRICO DE TRANSMISSÕES AO VIVO NO YOUTUBE")
+        hTitle.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        hTitle.setStyleSheet("color: #d4af37; letter-spacing: 1px;")
+        topBar.addWidget(hTitle)
+        topBar.addStretch()
+
+        self.btnRefreshLiveHistory = QPushButton("🔄 Atualizar")
+        self.btnRefreshLiveHistory.setObjectName("BtnSecondary")
+        self.btnRefreshLiveHistory.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnRefreshLiveHistory.clicked.connect(self.refreshLiveHistoryTable)
+        topBar.addWidget(self.btnRefreshLiveHistory)
+        layout.addLayout(topBar)
+
+        # Add Live Entry Bar
+        entryFrame = QFrame()
+        entryFrame.setStyleSheet("background-color: #12151d; border: 1px solid #242b3b; border-radius: 10px; padding: 10px;")
+        eLayout = QHBoxLayout(entryFrame)
+        eLayout.setSpacing(10)
+
+        eLabel = QLabel("Anotação da live:")
+        eLabel.setStyleSheet("color: #a0aec0; font-weight: bold; font-size: 11px;")
+        eLayout.addWidget(eLabel)
+
+        self.liveNotesInput = QLineEdit()
+        self.liveNotesInput.setPlaceholderText("Ex: Live #14 - Zeramos a primeira metade, boss derrotado!")
+        eLayout.addWidget(self.liveNotesInput, 1)
+
+        self.btnRegisterCurrentLive = QPushButton("➕ Registrar Live com Jogo Atual")
+        self.btnRegisterCurrentLive.setObjectName("BtnSecondary")
+        self.btnRegisterCurrentLive.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnRegisterCurrentLive.clicked.connect(self.onAddCustomLiveRecord)
+        eLayout.addWidget(self.btnRegisterCurrentLive)
+        layout.addWidget(entryFrame)
+
+        # Live History Table
+        self.liveTable = QTableWidget()
+        self.liveTable.setColumnCount(5)
+        self.liveTable.setHorizontalHeaderLabels(["ID", "Data da Live", "Jogo Transmitido", "Duração Estimada", "Anotações do Streamer"])
+        self.liveTable.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.liveTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.liveTable.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.liveTable.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.liveTable.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self.liveTable.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.liveTable.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        layout.addWidget(self.liveTable, 1)
+
+        # Delete Action
+        delRow = QHBoxLayout()
+        self.btnDeleteLiveRecord = QPushButton("🗑️ Excluir Registro Selecionado")
+        self.btnDeleteLiveRecord.setObjectName("BtnSecondary")
+        self.btnDeleteLiveRecord.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnDeleteLiveRecord.clicked.connect(self.onDeleteSelectedLiveRecord)
+        delRow.addWidget(self.btnDeleteLiveRecord)
+        delRow.addStretch()
+        layout.addLayout(delRow)
+
+        return container
+
+
+    # -------------------------------------------------------------
+    # Logics & Updates: Hero Card
+    # -------------------------------------------------------------
+    def updateHeroDisplay(self, gameEntry):
+        self.currentChoice = gameEntry
+        display_name = formatDisplayName(gameEntry)
+        self.gameTitleLabel.setText(display_name)
+
+        platform = detectPlatform(gameEntry)
+        self.platformBadge.setText(platform.upper())
+        self.platformBadge.setStyleSheet(
+            f"background-color: {getPlatformColor(platform)}; color: #ffffff; "
+            f"border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;"
+        )
+
+        info = findGameInfo(gameEntry)
+        times_played = info[2] if info else 0
+        finished = info[4] if info else 0
+        fav = info[5] if info else 0
+
+        status_text = "Zerado ✔" if finished else "Em aberto"
+        fav_text = " • ⭐ Favorito" if fav else ""
+        self.gameStatsLabel.setText(f"Vezes jogado: {times_played}x • Status: {status_text}{fav_text}")
+
+        self.btnFavorite.setText("⭐ Desfavoritar" if fav else "⭐ Favoritar")
+        self.btnFinish.setText("✔ Desmarcar Zerado" if finished else "✔ Marcar Zerado")
+
+        # Load Icon
+        try:
+            pilImg = findGameIcon(
+                gameEntry,
+                playnitePath=getattr(self.config, 'playnitePath', '')
+            )
+            pilImg = pilImg.convert("RGBA")
+            data = pilImg.tobytes("raw", "RGBA")
+            qim = QImage(data, pilImg.size[0], pilImg.size[1], QImage.Format.Format_RGBA8888)
+            cover_w = getattr(self.config, 'uiCoverWidth', 160)
+            cover_h = getattr(self.config, 'uiCoverHeight', 160)
+            pix = QPixmap.fromImage(qim).scaled(cover_w, cover_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.imageLabel.setPixmap(pix)
+            if self.overlayWindow and self.overlayWindow.isVisible():
+                self.overlayWindow.updateGame(display_name, pix, platform)
+        except Exception as e:
+            logger.warning(f"Error rendering icon in dashboard: {e}")
+
+    # -------------------------------------------------------------
+    # Logics & Updates: Game of the Day (GOTD)
+    # -------------------------------------------------------------
+    def onRerollGotd(self, initial=False):
+        chosen = getGameOfTheDay(self.content, seed_date=initial)
+        if not chosen:
+            chosen = self.currentChoice
+        self.currentGotd = chosen
+        self.updateGotdDisplay(chosen)
+
+    def updateGotdDisplay(self, gameEntry):
+        display_name = formatDisplayName(gameEntry)
+        self.gotdTitleLabel.setText(display_name)
+
+        platform = detectPlatform(gameEntry)
+        self.gotdPlatformBadge.setText(platform.upper())
+        self.gotdPlatformBadge.setStyleSheet(
+            f"background-color: {getPlatformColor(platform)}; color: #ffffff; "
+            f"border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;"
+        )
+
+        info = findGameInfo(gameEntry)
+        times_played = info[2] if info else 0
+        finished = info[4] if info else 0
+        status_text = "Zerado ✔" if finished else "Em aberto"
+        self.gotdStatsLabel.setText(f"Vezes jogado: {times_played}x • Status: {status_text} • Pronto para rodar")
+
+        try:
+            pilImg = findGameIcon(
+                gameEntry,
+                playnitePath=getattr(self.config, 'playnitePath', '')
+            )
+            pilImg = pilImg.convert("RGBA")
+            data = pilImg.tobytes("raw", "RGBA")
+            qim = QImage(data, pilImg.size[0], pilImg.size[1], QImage.Format.Format_RGBA8888)
+            pix = QPixmap.fromImage(qim).scaled(180, 180, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.gotdImageLabel.setPixmap(pix)
+        except Exception as e:
+            logger.warning(f"Error rendering GOTD icon: {e}")
+
+    def onPlayGotd(self):
+        target = self.currentGotd or self.currentChoice
+        logger.info(f"Launching Game of the Day: {target}")
+        self.showMinimized()
+        executeGame(target, self.steamOwnedGames)
+        self.refreshStats()
+        self.refreshTable()
+        if self.currentGotd:
+            self.updateGotdDisplay(self.currentGotd)
+
+    # -------------------------------------------------------------
+    # Logics & Updates: Game of the Year (GOTY)
+    # -------------------------------------------------------------
+    def onRerollGoty(self):
+        goty = getRandomGoty()
+        if not goty:
+            return
+        self.currentGoty = goty
+        self.updateGotyDisplay(goty)
+
+    def updateGotyDisplay(self, goty):
+        self.gotyYearBadge.setText(f"🏆 GAME OF THE YEAR - ANO {goty['year']}")
+        self.gotyTitleLabel.setText(goty['title'])
+        self.gotyMetaLabel.setText(f"{goty['developer']} • {goty['genre']} • {goty['awards']}")
+        self.gotySummaryLabel.setText(goty['summary'])
+
+        is_inst = goty['is_installed']
+        if is_inst:
+            self.gotyInstalledBadge.setText("✔ INSTALADO NO SEU PC")
+            self.gotyInstalledBadge.setStyleSheet("background-color: #00b894; color: #0d0f14; border-radius: 6px; padding: 4px 10px; font-weight: bold;")
+            self.btnGotyPlay.setEnabled(True)
+            self.btnGotyPlay.setText("▶  JOGAR GOTY INSTALADO")
+            self.btnGotyPlay.setStyleSheet("")
+        else:
+            self.gotyInstalledBadge.setText("NÃO INSTALADO")
+            self.gotyInstalledBadge.setStyleSheet("background-color: #2d3748; color: #a0aec0; border-radius: 6px; padding: 4px 10px; font-weight: bold;")
+            self.btnGotyPlay.setEnabled(False)
+            self.btnGotyPlay.setText("🔒 Não Instalado no PC")
+            self.btnGotyPlay.setStyleSheet("background-color: #2d3748; color: #718096;")
+
+        # Resolve Cover Art
+        try:
+            # Always query by canonical GOTY title to guarantee exact cover match
+            pilImg = findGameIcon(
+                goty['title'],
+                playnitePath=getattr(self.config, 'playnitePath', '')
+            )
+            pilImg = pilImg.convert("RGBA")
+            data = pilImg.tobytes("raw", "RGBA")
+            qim = QImage(data, pilImg.size[0], pilImg.size[1], QImage.Format.Format_RGBA8888)
+            pix = QPixmap.fromImage(qim).scaled(160, 160, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.gotyImageLabel.setPixmap(pix)
+        except Exception as e:
+            logger.warning(f"Error rendering GOTY cover: {e}")
+
+    def onPlayGoty(self):
+        if not self.currentGoty or not self.currentGoty.get('is_installed'):
+            return
+        target = self.currentGoty.get('library_entry')
+        if target:
+            logger.info(f"Launching GOTY game: {target}")
+            self.showMinimized()
+            executeGame(target, self.steamOwnedGames)
+            self.refreshStats()
+            self.refreshTable()
+
+    def onExploreGoty(self):
+        if not self.currentGoty:
+            return
+        title = self.currentGoty['title']
+        url = f"https://www.google.com/search?q={title.replace(' ', '+')}+game"
+        webbrowser.open(url)
+
+    def refreshGotyTable(self):
+        gotys = getAllGotys()
+        query = self.gotySearchBox.text().strip().lower()
+        if query:
+            gotys = [g for g in gotys if query in g['title'].lower() or query in str(g['year']) or query in g['developer'].lower()]
+
+        self.gotyTable.setRowCount(len(gotys))
+        for row, g in enumerate(gotys):
+            yearItem = QTableWidgetItem(str(g['year']))
+            yearItem.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            yearItem.setForeground(QColor("#d4af37"))
+
+            titleItem = QTableWidgetItem(g['title'])
+            titleItem.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+            titleItem.setData(Qt.ItemDataRole.UserRole, g)
+
+            devItem = QTableWidgetItem(g['developer'])
+            genreItem = QTableWidgetItem(g['genre'])
+            awardsItem = QTableWidgetItem(g['awards'])
+            awardsItem.setForeground(QColor("#a0aec0"))
+
+            instText = "✔ Sim" if g['is_installed'] else "—"
+            instItem = QTableWidgetItem(instText)
+            instItem.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if g['is_installed']:
+                instItem.setForeground(QColor("#00cec9"))
+            else:
+                instItem.setForeground(QColor("#718096"))
+
+            self.gotyTable.setItem(row, 0, yearItem)
+            self.gotyTable.setItem(row, 1, titleItem)
+            self.gotyTable.setItem(row, 2, devItem)
+            self.gotyTable.setItem(row, 3, genreItem)
+            self.gotyTable.setItem(row, 4, awardsItem)
+            self.gotyTable.setItem(row, 5, instItem)
+
+    def onGotySearchChanged(self, text):
+        self.refreshGotyTable()
+
+    def onGotyTableDoubleClicked(self, index):
+        row = self.gotyTable.currentRow()
+        if row >= 0:
+            item = self.gotyTable.item(row, 1)
+            if item:
+                goty = item.data(Qt.ItemDataRole.UserRole)
+                if goty:
+                    self.currentGoty = goty
+                    self.updateGotyDisplay(goty)
+                    if goty['is_installed'] and goty.get('library_entry'):
+                        self.onPlayGoty()
+
+    # -------------------------------------------------------------
+    # General Event Handlers
+    # -------------------------------------------------------------
+    def refreshStats(self):
+        stats = getDatabaseStats()
+        total = stats["total_games"]
+        played = stats["total_played"]
+        finished = stats["finished_count"]
+        rate = stats["completion_rate"]
+
+        self.statTotal.findChild(QLabel, "StatValue").setText(f"{total:,}".replace(",", "."))
+        self.statPlayed.findChild(QLabel, "StatValue").setText(str(played))
+        self.statFinished.findChild(QLabel, "StatValue").setText(str(finished))
+        self.statBacklog.findChild(QLabel, "StatValue").setText(f"{rate}%")
+
+    def refreshTable(self):
+        query = self.searchBox.text().strip()
+        status_filter = self.filterCombo.currentText()
+        limit = getattr(self.config, 'uiTableLimit', 400)
+        rows = getGamesList(filterText=query, statusFilter=status_filter, limit=limit)
+        
+        self.table.setRowCount(len(rows))
+        for row_idx, r in enumerate(rows):
+            game_name = r[1]
+            times_played = r[2] or 0
+            last_played = r[3] or "Nunca"
+            finished = r[4] or 0
+            favorite = r[5] or 0
+
+            display_title = formatDisplayName(game_name)
+            platform = detectPlatform(game_name)
+
+            titleItem = QTableWidgetItem(f"{'⭐ ' if favorite else ''}{display_title}")
+            titleItem.setData(Qt.ItemDataRole.UserRole, game_name)
+            
+            platItem = QTableWidgetItem(platform)
+            platItem.setForeground(QColor(getPlatformColor(platform)))
+
+            timesItem = QTableWidgetItem(f"{times_played}x")
+            timesItem.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+
+            lastItem = QTableWidgetItem(str(last_played).split(".")[0])
+            
+            statusItem = QTableWidgetItem("✔ Zerado" if finished else "Em aberto")
+            if finished:
+                statusItem.setForeground(QColor("#00b894"))
+            else:
+                statusItem.setForeground(QColor("#8c96a8"))
+
+            self.table.setItem(row_idx, 0, titleItem)
+            self.table.setItem(row_idx, 1, platItem)
+            self.table.setItem(row_idx, 2, timesItem)
+            self.table.setItem(row_idx, 3, lastItem)
+            self.table.setItem(row_idx, 4, statusItem)
+
+    def onSearchChanged(self, text):
+        self.refreshTable()
+
+    def onFilterChanged(self, idx):
+        self.refreshTable()
+
+    def onRerollHero(self):
+        filter_mode = self.comboRerollFilter.currentText()
+        filtered_content = self.content
+
+        if "eXoDOS" in filter_mode:
+            filtered_content = [g for g in self.content if g.startswith(exodosPrefix) or "exodos" in g.lower()]
+        elif "Atalhos" in filter_mode:
+            filtered_content = [g for g in self.content if g.startswith(linkPrefix)]
+        elif "Locais" in filter_mode:
+            filtered_content = [g for g in self.content if not g.startswith(linkPrefix) and not g.startswith(exodosPrefix) and not g.startswith(PLAYNITE_PREFIX)]
+        elif "Playnite" in filter_mode:
+            filtered_content = [g for g in self.content if g.startswith(PLAYNITE_PREFIX)]
+
+        if not filtered_content:
+            QMessageBox.information(self, "Aviso", f"Nenhum jogo encontrado para a categoria: {filter_mode}")
+            return
+
+        def do_pick():
+            new_choice = chooseGame(filtered_content, sampleSize=getattr(self.config, 'randomSampleSize', 25))
+            self.updateHeroDisplay(new_choice)
+
+        if hasattr(self, 'chkRoulette') and self.chkRoulette.isChecked():
+            self.startRouletteAnimation(do_pick)
+        else:
+            do_pick()
+
+    def onCleanDatabase(self):
+        msgBox = QMessageBox(self)
+        msgBox.setWindowTitle("Limpeza de Banco de Dados")
+        msgBox.setIcon(QMessageBox.Icon.Question)
+        msgBox.setTextFormat(Qt.TextFormat.RichText)
+        msgBox.setText(
+            "<b>Deseja iniciar a verificação de limpeza do banco de dados agora?</b><br><br>"
+            "Esta rotina irá verificar se os jogos cadastrados no banco ainda existem no seu computador.<br><br>"
+            "• Jogos desinstalados serão <b>removidos do banco de dados</b>.<br>"
+            "• <font color='#00cec9'><b>Nenhum arquivo ou pasta será apagado do disco</b></font>.<br>"
+            "• Pastas que não possuem o executável mas contêm arquivos residuais serão listadas no relatório final."
+        )
+        msgBox.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        msgBox.setDefaultButton(QMessageBox.StandardButton.No)
+        
+        reply = msgBox.exec()
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        from aesgard.database import cleanOrphanGames, opencon
+        from aesgard.gameutil import isGameInstalledOnSystem
+
+        playnite_ids = set()
+        if getattr(self.config, 'playniteEnabled', True):
+            for entry in self.content:
+                if entry.startswith(PLAYNITE_PREFIX):
+                    parts = entry.split(":")
+                    if len(parts) >= 3:
+                        playnite_ids.add(parts[-1])
+
+        def check_func(game_name):
+            return isGameInstalledOnSystem(game_name, self.config, playniteInstalledIds=playnite_ids)
+
+        progress = QProgressDialog("Iniciando verificação do banco de dados...", "Cancelar", 0, 100, self)
+        progress.setWindowTitle("Limpando Banco de Dados")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+
+        def on_progress(current, total):
+            if total > 0:
+                pct = int((current / total) * 100)
+                progress.setValue(pct)
+                progress.setLabelText(f"Verificando jogos instalados ({current:,} / {total:,})...".replace(",", "."))
+            QApplication.processEvents()
+
+        try:
+            conn = opencon()
+            result = cleanOrphanGames(conn, self.config, check_installed_func=check_func, progress_callback=on_progress)
+            conn.close()
+            progress.setValue(100)
+            self.refreshStats()
+            self.refreshTable()
+        except Exception as e:
+            logger.error(f"Erro durante limpeza: {e}")
+            result = {"total_checked": 0, "removed_count": 0, "warnings_not_empty": [str(e)]}
+        finally:
+            progress.close()
+
+        resBox = QMessageBox(self)
+        resBox.setWindowTitle("Relatório de Limpeza")
+        resBox.setTextFormat(Qt.TextFormat.RichText)
+        msg = (
+            f"<b>Limpeza concluída com sucesso!</b><br><br>"
+            f"• Jogos verificados: <b>{result['total_checked']:,}</b><br>".replace(",", ".") +
+            f"• Jogos desinstalados removidos do banco: <font color='#00cec9'><b>{result['removed_count']:,}</b></font><br>".replace(",", ".")
+        )
+
+        if result["warnings_not_empty"]:
+            msg += "<br><font color='#fdcb6e'><b>⚠️ Pastas com arquivos residuais (jogo não instalado):</b></font><br>"
+            msg += "<div style='font-size: 11px; max-height: 180px; overflow-y: scroll;'><ul>"
+            for w in result["warnings_not_empty"][:30]:
+                msg += f"<li>{w}</li>"
+            if len(result["warnings_not_empty"]) > 30:
+                msg += f"<li><i>...e mais {len(result['warnings_not_empty']) - 30} pastas com arquivos.</i></li>"
+            msg += "</ul></div>"
+
+        resBox.setText(msg)
+        resBox.setIcon(QMessageBox.Icon.Information)
+        resBox.exec()
+
+    def onPlayHero(self):
+        target = self.currentChoice
+        logger.info(f"Launching game from Hero Card: {target}")
+        self.showMinimized()
+        executeGame(target, self.steamOwnedGames)
+        self.refreshStats()
+        self.refreshTable()
+        self.updateHeroDisplay(self.currentChoice)
+
+    def onPlaySelected(self):
+        row = self.table.currentRow()
+        if row >= 0:
+            item = self.table.item(row, 0)
+            if item:
+                target = item.data(Qt.ItemDataRole.UserRole)
+                logger.info(f"Launching game from Database Table: {target}")
+                self.showMinimized()
+                executeGame(target, self.steamOwnedGames)
+                self.refreshStats()
+                self.refreshTable()
+                self.updateHeroDisplay(target)
+        else:
+            QMessageBox.information(self, "Aviso", "Por favor, selecione um jogo na tabela primeiro.")
+
+    def onTableDoubleClicked(self, index):
+        self.onPlaySelected()
+
+    def onToggleFavorite(self):
+        info = findGameInfo(self.currentChoice)
+        current_fav = info[5] if info else 0
+        new_fav = 0 if current_fav else 1
+        setFavorite(self.currentChoice, new_fav)
+        self.updateHeroDisplay(self.currentChoice)
+        self.refreshStats()
+        self.refreshTable()
+
+    def onToggleFinished(self):
+        info = findGameInfo(self.currentChoice)
+        current_fin = info[4] if info else 0
+        new_fin = 0 if current_fin else 1
+        setFinished(self.currentChoice, new_fin)
+        self.updateHeroDisplay(self.currentChoice)
+        self.refreshStats()
+        self.refreshTable()
+
+    # -------------------------------------------------------------
+    # Streamer, Roleta & Live Intelligence Methods
+    # -------------------------------------------------------------
+    def startRouletteAnimation(self, on_finished_callback):
+        if hasattr(self, '_rouletteTimer') and self._rouletteTimer and self._rouletteTimer.isActive():
+            return
+        
+        self._rouletteTicks = 0
+        self._rouletteTotalTicks = 16
+        self._rouletteInterval = 60
+        self._rouletteCallback = on_finished_callback
+        self.btnReroll.setEnabled(False)
+
+        self._rouletteTimer = QTimer(self)
+        self._rouletteTimer.timeout.connect(self._onRouletteTick)
+        self._rouletteTimer.start(self._rouletteInterval)
+
+    def _onRouletteTick(self):
+        self._rouletteTicks += 1
+        if self.content:
+            cand = random.choice(self.content)
+            self.gameTitleLabel.setText(f"🎲 {formatDisplayName(cand)}...")
+            self.platformBadge.setText("SORTEANDO...")
+            self.platformBadge.setStyleSheet("background-color: #6c5ce7; color: #ffffff; border-radius: 6px; padding: 3px 8px; font-weight: bold;")
+
+        if self._rouletteTicks > 8:
+            self._rouletteInterval = int(self._rouletteInterval * 1.25)
+            self._rouletteTimer.setInterval(self._rouletteInterval)
+
+        if self._rouletteTicks >= self._rouletteTotalTicks:
+            self._rouletteTimer.stop()
+            self.btnReroll.setEnabled(True)
+            if self._rouletteCallback:
+                self._rouletteCallback()
+
+    def onApplyLiveTheme(self, mode):
+        if mode == "all":
+            self.comboRerollFilter.setCurrentIndex(0)
+        elif mode == "retro":
+            self.comboRerollFilter.setCurrentIndex(1)
+        elif mode == "modern":
+            self.comboRerollFilter.setCurrentIndex(4)
+        elif mode == "favorites":
+            favs = [g for g in self.content if (findGameInfo(g) and findGameInfo(g)[5] == 1)]
+            if favs:
+                new_choice = random.choice(favs)
+                if self.chkRoulette.isChecked():
+                    self.startRouletteAnimation(lambda: self.updateHeroDisplay(new_choice))
+                else:
+                    self.updateHeroDisplay(new_choice)
+            else:
+                QMessageBox.information(self, "Tema da Live", "Nenhum jogo marcado como favorito ainda.")
+            return
+        elif mode == "backlog":
+            zeros = [g for g in self.content if (not findGameInfo(g) or findGameInfo(g)[2] == 0)]
+            if zeros:
+                new_choice = chooseGame(zeros, sampleSize=getattr(self.config, 'randomSampleSize', 25))
+                if self.chkRoulette.isChecked():
+                    self.startRouletteAnimation(lambda: self.updateHeroDisplay(new_choice))
+                else:
+                    self.updateHeroDisplay(new_choice)
+            else:
+                QMessageBox.information(self, "Tema da Live", "Parabéns! Todos os jogos já foram jogados pelo menos uma vez.")
+            return
+
+        self.onRerollHero()
+
+    def onOpenHeroIntel(self):
+        pix = self.imageLabel.pixmap()
+        dlg = GameIntelDialog(self.currentChoice, coverPixmap=pix, parent=self)
+        dlg.exec()
+
+    def onOpenGotdIntel(self):
+        target = self.currentGotd or self.currentChoice
+        pix = self.gotdImageLabel.pixmap()
+        dlg = GameIntelDialog(target, coverPixmap=pix, parent=self)
+        dlg.exec()
+
+    def onOpenGotyIntel(self):
+        title = self.currentGoty['title'] if self.currentGoty else "GOTY"
+        pix = self.gotyImageLabel.pixmap()
+        dlg = GameIntelDialog(title, coverPixmap=pix, parent=self)
+        dlg.exec()
+
+    def onOpenObsOverlay(self):
+        if not self.overlayWindow or not self.overlayWindow.isVisible():
+            pix = self.imageLabel.pixmap()
+            platform = detectPlatform(self.currentChoice)
+            self.overlayWindow = StreamerOverlayWindow(
+                gameTitle=formatDisplayName(self.currentChoice),
+                coverPixmap=pix,
+                platformText=platform
+            )
+            self.overlayWindow.show()
+        else:
+            self.overlayWindow.activateWindow()
+
+    # -------------------------------------------------------------
+    # Chat Choice Trio Handlers
+    # -------------------------------------------------------------
+    def onRerollChatChoice(self):
+        if len(self.content) < 3:
+            candidates = self.content * 3
+        else:
+            candidates = random.sample(self.content, 3)
+
+        self.chatChoiceTrio = candidates
+        for i, game in enumerate(candidates):
+            card_info = self.trioCards[i]
+            card_info["gameEntry"] = game
+            card_info["titleLabel"].setText(formatDisplayName(game))
+            plat = detectPlatform(game)
+            card_info["metaLabel"].setText(f"Plataforma: {plat}")
+
+            try:
+                pilImg = findGameIcon(game, playnitePath=getattr(self.config, 'playnitePath', ''))
+                pilImg = pilImg.convert("RGBA")
+                data = pilImg.tobytes("raw", "RGBA")
+                qim = QImage(data, pilImg.size[0], pilImg.size[1], QImage.Format.Format_RGBA8888)
+                pix = QPixmap.fromImage(qim).scaled(160, 160, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                card_info["coverLabel"].setPixmap(pix)
+            except Exception:
+                pass
+
+    def onPlayChatChoice(self, index):
+        if 0 <= index < len(self.chatChoiceTrio):
+            target = self.chatChoiceTrio[index]
+            logger.info(f"Launching winning Chat Choice game: {target}")
+            self.showMinimized()
+            executeGame(target, self.steamOwnedGames)
+            self.refreshStats()
+            self.refreshTable()
+            self.updateHeroDisplay(target)
+
+    def onOpenChatChoiceIntel(self, index):
+        if 0 <= index < len(self.chatChoiceTrio):
+            target = self.chatChoiceTrio[index]
+            pix = self.trioCards[index]["coverLabel"].pixmap()
+            dlg = GameIntelDialog(target, coverPixmap=pix, parent=self)
+            dlg.exec()
+
+    def onCopyChatPoll(self):
+        if len(self.chatChoiceTrio) < 3:
+            return
+        names = [formatDisplayName(g) for g in self.chatChoiceTrio]
+        poll_text = f"🎮 ENQUETE DA LIVE - QUAL DEVO JOGAR HOJE?\n\nOpção A: {names[0]}\nOpção B: {names[1]}\nOpção C: {names[2]}\n\nVotem no chat!"
+        cb = QApplication.clipboard()
+        if cb:
+            cb.setText(poll_text)
+            QMessageBox.information(self, "Enquete Copiada!", f"Texto da enquete copiado para o Clipboard:\n\n{poll_text}")
+
+    # -------------------------------------------------------------
+    # Live History Handlers
+    # -------------------------------------------------------------
+    def refreshLiveHistoryTable(self):
+        records = self.liveHistoryMgr.getLiveHistory(limit=60)
+        self.liveTable.setRowCount(len(records))
+        for row_idx, r in enumerate(records):
+            id_item = QTableWidgetItem(str(r['id']))
+            id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.liveTable.setItem(row_idx, 0, id_item)
+
+            date_item = QTableWidgetItem(r['date'])
+            date_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.liveTable.setItem(row_idx, 1, date_item)
+
+            game_item = QTableWidgetItem(formatDisplayName(r['gameName']))
+            game_item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+            self.liveTable.setItem(row_idx, 2, game_item)
+
+            dur_item = QTableWidgetItem(f"{r['duration']}h")
+            dur_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.liveTable.setItem(row_idx, 3, dur_item)
+
+            notes_item = QTableWidgetItem(r['notes'] or "—")
+            self.liveTable.setItem(row_idx, 4, notes_item)
+
+    def onRecordCurrentHeroLive(self):
+        name = formatDisplayName(self.currentChoice)
+        self.liveHistoryMgr.recordLive(gameName=self.currentChoice, notes="Sorteado pelo Choose Random Game")
+        QMessageBox.information(self, "Live Gravada!", f"O jogo '{name}' foi registrado com sucesso no histórico de transmissões ao vivo!")
+        self.refreshLiveHistoryTable()
+
+    def onAddCustomLiveRecord(self):
+        notes = self.liveNotesInput.text().strip() or "Transmissão ao vivo no YouTube"
+        name = self.currentChoice
+        self.liveHistoryMgr.recordLive(gameName=name, notes=notes)
+        self.liveNotesInput.clear()
+        self.refreshLiveHistoryTable()
+        QMessageBox.information(self, "Registrado!", f"Live com '{formatDisplayName(name)}' registrada!")
+
+    def onDeleteSelectedLiveRecord(self):
+        row = self.liveTable.currentRow()
+        if row >= 0:
+            id_item = self.liveTable.item(row, 0)
+            if id_item:
+                live_id = int(id_item.text())
+                self.liveHistoryMgr.deleteLive(live_id)
+                self.refreshLiveHistoryTable()
+
+def showDashboard(choosedGame, steamOwnedGames, content, config):
+    """Entry point to start the PyQt6 Gaming Dashboard."""
+    app = QApplication.instance()
+    if not app:
+        app = QApplication(sys.argv)
+    
+    dashboard = GamingDashboard(content, choosedGame, steamOwnedGames, config)
+    dashboard.show()
+    app.exec()

@@ -1,56 +1,155 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Mar 21 06:31:32 2023
-
-@author: Marcelo
+GOG integration module for Choose Random Game.
+Provides:
+- GOG official catalog search & cover art retrieval via GOG CDN
+- Local GOG Galaxy database reader (galaxy-2.0.db)
+- Local installation folder inspector (goggame-*.info / goggame-*.ico)
+- Game launcher via GOG Galaxy URI or standalone executable
 """
-
+import os
+import re
+import json
+import logging
 import sqlite3
+import requests
+from io import BytesIO
+from typing import Optional, List, Dict
+from PIL import Image
 
-def getGOGGames(url):
-    content = []
-    _connection = sqlite3.connect(url)
-    _cursor = _connection.cursor()
+logger = logging.getLogger(__name__)
 
-    _exception = None
+DEFAULT_GALAXY_DB_PATH = os.path.expandvars(r"%PROGRAMDATA%\GOG.com\Galaxy\storage\galaxy-2.0.db")
+
+def cleanGOGTitle(title: str) -> str:
+    """Prepares a clean search query for GOG catalog API."""
+    clean = re.sub(r'\(.*?\)', '', title)
+    clean = re.sub(r'\[.*?\]', '', clean)
+    clean = clean.replace('.lnk', '').replace('.url', '').replace('.exe', '')
+    # Replace separators with spaces
+    clean = re.sub(r'[-_:+]', ' ', clean)
+    return ' '.join(clean.split()).strip()
+
+def fetchGOGCover(title: str, timeout: int = 5) -> Optional[Image.Image]:
+    """
+    Queries official GOG Catalog API for high-resolution vertical or horizontal cover art.
+    Uses public endpoints from GOG (no authentication required).
+    """
+    if not title or len(title) < 2:
+        return None
+
+    clean_term = cleanGOGTitle(title)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ChooseRandomGame/2.0',
+        'Accept': 'application/json'
+    }
+
+    # Query variations: 1. Full clean term; 2. Primary title before colon/hyphen if available
+    queries = [clean_term]
+    if ' ' in clean_term:
+        words = clean_term.split()
+        if len(words) >= 3:
+            queries.append(' '.join(words[:2]))
+
+    for q in queries:
+        try:
+            # 1. Official GOG Catalog v1 API
+            catalog_url = f"https://catalog.gog.com/v1/catalog?query={requests.utils.quote(q)}&limit=5"
+            resp = requests.get(catalog_url, headers=headers, timeout=timeout)
+            if resp.status_code == 200:
+                data = resp.json()
+                products = data.get("products", [])
+                if products:
+                    first = products[0]
+                    # Candidates in order of quality
+                    img_candidates = [
+                        first.get("coverVertical"),
+                        first.get("coverHorizontal"),
+                        first.get("galaxyBackgroundImage")
+                    ]
+                    for img_url in img_candidates:
+                        if img_url:
+                            # Replace formatter placeholder if present
+                            real_url = img_url.replace("_{formatter}.jpg", ".jpg").replace("_{formatter}.png", ".png")
+                            try:
+                                img_resp = requests.get(real_url, headers=headers, timeout=timeout)
+                                if img_resp.status_code == 200 and len(img_resp.content) > 1000:
+                                    return Image.open(BytesIO(img_resp.content))
+                            except Exception:
+                                continue
+
+            # 2. GOG Embed Ajax Filtered Search (Fallback)
+            embed_url = f"https://embed.gog.com/games/ajax/filtered?mediaType=game&search={requests.utils.quote(q)}"
+            resp_embed = requests.get(embed_url, headers=headers, timeout=timeout)
+            if resp_embed.status_code == 200:
+                data = resp_embed.json()
+                products = data.get("products", [])
+                if products:
+                    prod = products[0]
+                    img_url = prod.get("image")
+                    if img_url:
+                        # GOG embed image urls typically start with //
+                        if img_url.startswith("//"):
+                            img_url = f"https:{img_url}"
+                        if not img_url.endswith((".jpg", ".png")):
+                            img_url = f"{img_url}_glx_vertical_cover.jpg"
+                        try:
+                            img_resp = requests.get(img_url, headers=headers, timeout=timeout)
+                            if img_resp.status_code == 200 and len(img_resp.content) > 1000:
+                                return Image.open(BytesIO(img_resp.content))
+                        except Exception:
+                            pass
+        except Exception as e:
+            logger.debug(f"GOG cover search error for '{q}': {e}")
+
+    return None
+
+def findGOGGameFolderCover(gameDir: str) -> Optional[Image.Image]:
+    """
+    Inspects a local GOG game installation folder for goggame-*.ico or art files.
+    """
+    if not os.path.isdir(gameDir):
+        return None
     try:
-        yield _cursor
+        for f in os.listdir(gameDir):
+            f_lower = f.lower()
+            if f_lower.startswith("goggame-") and f_lower.endswith((".ico", ".png", ".jpg")):
+                return Image.open(os.path.join(gameDir, f))
+            if f_lower in ("cover.jpg", "cover.png", "boxart.jpg", "icon.ico"):
+                return Image.open(os.path.join(gameDir, f))
     except Exception as e:
-        _exception = e
-        
-	# Create a view of ProductPurchaseDates (= purchased/added games) joined on GamePieces for a full owned game data DB
-    owned_game_database = """CREATE TEMP VIEW MasterList AS
-            SELECT GamePieces.releaseKey, GamePieces.gamePieceTypeId, GamePieces.value FROM ProductPurchaseDates
-            JOIN GamePieces ON ProductPurchaseDates.gameReleaseKey = GamePieces.releaseKey;"""
+        logger.debug(f"Error inspecting GOG folder '{gameDir}': {e}")
+    return None
 
-	# Set up default queries and processing metadata, and always extract the game title along with any parameters
-    positions = Positions({'releaseKey': 0, 'title': 1})
-    fieldnames = ['title']
-    og_fields = ["""CREATE TEMP VIEW MasterDB AS SELECT DISTINCT(MasterList.releaseKey) AS releaseKey, MasterList.value AS title, PLATFORMS.value AS platformList"""]
-    og_references = [""" FROM MasterList, MasterList AS PLATFORMS"""]
-    og_joins = []
-    og_conditions = [""" WHERE MasterList.gamePieceTypeId={} AND PLATFORMS.releaseKey=MasterList.releaseKey AND PLATFORMS.gamePieceTypeId={}""".format(
-                	id('title'),
-				id('allGameReleases')
-			)]
-    og_order = """ ORDER BY title;"""
-    og_resultFields = ['GROUP_CONCAT(DISTINCT MasterDB.releaseKey)', 'MasterDB.title']
-    og_resultGroupBy = ['MasterDB.platformList']
+def getGOGGalaxyGames(dbPath: Optional[str] = None) -> List[Dict[str, str]]:
+    """
+    Reads locally installed and owned games directly from GOG Galaxy SQLite database.
+    """
+    path = dbPath or DEFAULT_GALAXY_DB_PATH
+    if not os.path.exists(path):
+        return []
 
-    # Close the DB connection
-    _cursor.close()
-    _connection.close()
+    games = []
+    try:
+        uri = f"file:{os.path.abspath(path)}?mode=ro"
+        conn = sqlite3.connect(uri, uri=True)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT DISTINCT gp1.releaseKey, gp1.value 
+            FROM GamePieces gp1
+            JOIN InstalledExternalProducts iep ON iep.productId = gp1.releaseKey
+            WHERE gp1.gamePieceTypeId = 2;
+        """)
+        for r in cur.fetchall():
+            games.append({"releaseKey": str(r[0]), "title": str(r[1])})
+        conn.close()
+    except Exception as e:
+        logger.debug(f"Could not read GOG Galaxy database: {e}")
 
-    	# Re-raise the unhandled exception if needed
-    if _exception:
-       raise _exception
-        
-    return content
+    return games
 
-class Positions(dict):
-	""" small dictionary to avoid errors while parsing non-exported field positions """
-	def __getitem__(self, key):
-		try:
-			return dict.__getitem__(self, key)
-		except KeyError:
-			return None
+def launchGOGGame(releaseKeyOrId: str):
+    """Launches a game via GOG Galaxy client protocol."""
+    url = f"goggalaxy://openGameView/{releaseKeyOrId}"
+    logger.info(f"Launching GOG game: {url}")
+    os.startfile(url)
