@@ -117,6 +117,6 @@ class Config:
         self.streamerRouletteEnabled       = self.config.getboolean('STREAMER', 'rouletteEnabled', fallback=True)
         self.streamerRouletteDurationMs    = self.config.getint('STREAMER', 'rouletteDurationMs', fallback=2600)
         self.streamerOverlayChromaKey      = self.config.get('STREAMER', 'overlayChromaKey', fallback='dark')
-        self.streamerYouTubeMainChannel    = self.config.get('STREAMER', 'youtubeMainChannel', fallback='https://www.youtube.com/@CaninoBranco')
-        self.streamerYouTubeLiveChannel    = self.config.get('STREAMER', 'youtubeLiveChannel', fallback='https://www.youtube.com/@RandomLiveGameplays')
+        self.streamerYouTubeMainChannel    = self.config.get('STREAMER', 'youtubeMainChannel', fallback='')
+        self.streamerYouTubeLiveChannel    = self.config.get('STREAMER', 'youtubeLiveChannel', fallback='')
         self.streamerYouTubeChannel        = self.config.get('STREAMER', 'youtubeChannel', fallback=self.streamerYouTubeLiveChannel)

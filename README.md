@@ -4,19 +4,10 @@
 [![GUI](https://img.shields.io/badge/GUI-PyQt6-green?logo=qt)](https://riverbankcomputing.com/software/pyqt/)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![YouTube Principal](https://img.shields.io/badge/YouTube-@CaninoBranco-red?logo=youtube)](https://www.youtube.com/@CaninoBranco)
-[![YouTube Lives](https://img.shields.io/badge/YouTube_Lives-@RandomLiveGameplays-purple?logo=youtube)](https://www.youtube.com/@RandomLiveGameplays)
 
 > **Aplicativo inteligente para gerenciamento de backlog, sorteio ponderado de jogos e assistente completo para transmissões ao vivo no YouTube.**
 
 Criado especialmente para streamers e gamers com bibliotecas gigantescas (Steam, GOG, Playnite, eXoDOS, emuladores e pastas locais) que nunca sabem o que jogar ou querem transformar a escolha do jogo em uma atração interativa ao vivo com o chat da live!
-
----
-
-## 📺 Canais Oficiais do Projeto
-
-- 📺 **Canal Principal**: [@CaninoBranco](https://www.youtube.com/@CaninoBranco) — Análises, tutoriais, retrograming e conteúdo gamer.
-- 🔴 **Canal de Transmissões ao Vivo (Secundário)**: [@RandomLiveGameplays](https://www.youtube.com/@RandomLiveGameplays) — Lives ao vivo jogando os jogos sorteados pelo aplicativo em tempo real!
 
 ---
 
@@ -172,9 +163,9 @@ rouletteDurationMs = 2600
 # Cor padrão da janela OBS: 'dark', 'green' (Chroma Key) ou 'magenta'
 overlayChromaKey = dark
 
-# Canais do YouTube
-youtubeMainChannel = https://www.youtube.com/@CaninoBranco
-youtubeLiveChannel = https://www.youtube.com/@RandomLiveGameplays
+# Canais do YouTube (opcional)
+youtubeMainChannel = https://www.youtube.com/@SeuCanalPrincipal
+youtubeLiveChannel = https://www.youtube.com/@SeuCanalDeLives
 ```
 
 ---
@@ -278,4 +269,4 @@ Contribuições são muito bem-vindas! Sinta-se à vontade para abrir uma *Issue
 
 Distribuído sob a licença **MIT**. Consulte o arquivo [LICENSE](LICENSE) para obter mais informações.
 
-Desenvolvido com carinho para as comunidades de games e transmissões ao vivo de **[@CaninoBranco](https://www.youtube.com/@CaninoBranco)** e **[@RandomLiveGameplays](https://www.youtube.com/@RandomLiveGameplays)**! 🎮
+Desenvolvido com carinho para a comunidade gamer, criadores de conteúdo e streamers! 🎮
