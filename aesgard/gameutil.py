@@ -85,8 +85,15 @@ def findLauncherAndStart(choosedGame, launcherPrefixes, shortcutExt):
     launch = findLauncher(choosedGame, launcherPrefixes, shortcutExt)
     if launch is not None:
         logger.info(f"Calling launcher '{launch}' in '{choosedGame}'")
-        os.chdir(choosedGame)
-        os.startfile(launch)
+        orig_cwd = os.getcwd()
+        try:
+            os.chdir(choosedGame)
+            os.startfile(launch)
+        finally:
+            try:
+                os.chdir(orig_cwd)
+            except Exception:
+                pass
         return True
     return False
 
@@ -134,8 +141,15 @@ def openDOSBOX(choosedGame, DOSBOXLocation, DOSBOXExecutable, DOSBOXParameters):
         game_folder_name = choosedGame[posLastBar:]
         params = DOSBOXParameters.format(f'"cd {game_folder_name}"')
         if os.path.isdir(DOSBOXLocation):
-            os.chdir(DOSBOXLocation)
-            os.system(f"{DOSBOXExecutable} {params}")
+            orig_cwd = os.getcwd()
+            try:
+                os.chdir(DOSBOXLocation)
+                os.system(f"{DOSBOXExecutable} {params}")
+            finally:
+                try:
+                    os.chdir(orig_cwd)
+                except Exception:
+                    pass
             return True
     return False
 
@@ -170,8 +184,15 @@ def findeXoDOSGame(choosedGame, EXODOSLocation, metadataFolder=None, installBat=
                 bat_file, title = geteXoDOSGameDetails(c, installBat=installBat)
                 if bat_file:
                     logger.info(f"Executing eXoDOS Game '{bat_file}' in '{c}'")
-                    os.chdir(c)
-                    os.startfile(bat_file)
+                    orig_cwd = os.getcwd()
+                    try:
+                        os.chdir(c)
+                        os.startfile(bat_file)
+                    finally:
+                        try:
+                            os.chdir(orig_cwd)
+                        except Exception:
+                            pass
                     return True
     return False
 
@@ -209,8 +230,15 @@ def executeEXE(choosedGame):
     """Executes matched EXE if available."""
     exeInfo = findEXE(choosedGame)
     if exeInfo is not None:
-        os.chdir(exeInfo[1])
-        os.startfile(exeInfo[0])
+        orig_cwd = os.getcwd()
+        try:
+            os.chdir(exeInfo[1])
+            os.startfile(exeInfo[0])
+        finally:
+            try:
+                os.chdir(orig_cwd)
+            except Exception:
+                pass
         return True
     return False
 
@@ -565,13 +593,27 @@ def installGame(choosedGame):
                 if os.path.isdir(c):
                     install_bat = os.path.join(c, "install.bat")
                     if os.path.exists(install_bat):
-                        os.chdir(c)
-                        os.startfile(install_bat)
+                        orig_cwd = os.getcwd()
+                        try:
+                            os.chdir(c)
+                            os.startfile(install_bat)
+                        finally:
+                            try:
+                                os.chdir(orig_cwd)
+                            except Exception:
+                                pass
                         return True
                     for f in os.listdir(c):
                         if f.lower().endswith('.bat') and 'install' in f.lower():
-                            os.chdir(c)
-                            os.startfile(os.path.join(c, f))
+                            orig_cwd = os.getcwd()
+                            try:
+                                os.chdir(c)
+                                os.startfile(os.path.join(c, f))
+                            finally:
+                                try:
+                                    os.chdir(orig_cwd)
+                                except Exception:
+                                    pass
                             return True
 
         # 4. Local folder or shortcut fallback: open in Explorer

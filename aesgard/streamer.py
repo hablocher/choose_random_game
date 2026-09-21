@@ -23,6 +23,9 @@ class LiveHistoryManager:
     """Manages the history of games played during YouTube live streams in SQLite."""
 
     def __init__(self, dbPath: str = "Games.db"):
+        if not os.path.isabs(dbPath):
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            dbPath = os.path.join(base_dir, dbPath)
         self.dbPath = dbPath
         self._initDb()
 

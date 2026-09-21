@@ -3,6 +3,7 @@
 Database persistence module for Choose Random Game.
 Supports SQLite, MySQL, and Microsoft SQL Server with parameterized queries.
 """
+import os
 import logging
 import sqlite3 as sl
 
@@ -24,13 +25,24 @@ FIELD_FAVORITE = 5
 
 _INTEGRITY_CHECKED = False
 
+def _resolve_sqlite_db_path(db_name: str) -> str:
+    """Ensures SQLite database path is always absolute, immune to os.chdir."""
+    target = db_name if (db_name and db_name.endswith(".db")) else "Games.db"
+    if os.path.isabs(target):
+        return target
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_dir, target)
+
 def init(server, user, password, database, dbtype, table_name="GamesChoosed"):
     global SERVER, USER, PASSWORD, DATABASE, DBTYPE, TABLE_NAME, _INTEGRITY_CHECKED
     SERVER = server or ""
     USER = user or ""
     PASSWORD = password or ""
-    DATABASE = database or "Games.db"
     DBTYPE = (dbtype or "sqlite").lower()
+    if DBTYPE == "sqlite":
+        DATABASE = _resolve_sqlite_db_path(database)
+    else:
+        DATABASE = database or ""
     # Sanitize table name to alphanumeric/underscore
     cleaned_table = "".join(c for c in (table_name or "GamesChoosed") if c.isalnum() or c == "_")
     TABLE_NAME = cleaned_table or "GamesChoosed"
@@ -58,8 +70,9 @@ def opencon():
             database=DATABASE
         )
 
-    # Default to sqlite
-    conn = sl.connect(DATABASE if DATABASE.endswith(".db") else "Games.db")
+    # Default to sqlite (strictly absolute path to avoid directory shifts)
+    db_path = _resolve_sqlite_db_path(DATABASE)
+    conn = sl.connect(db_path)
     
     # Performance PRAGMAs for SQLite
     try:
