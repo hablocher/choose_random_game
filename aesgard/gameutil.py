@@ -238,15 +238,14 @@ def getGameOfTheDay(content, seed_date=True):
     if not content:
         return ""
     
-    # Prioritize installed games if known
+    # Prioritize installed games if known (fast single-query set lookup)
     installed_candidates = []
-    for g in content:
-        info = findGameInfo(g)
-        if info and len(info) >= 7:
-            if info[6] == 1:
-                installed_candidates.append(g)
-        else:
-            installed_candidates.append(g)
+    try:
+        from aesgard.database import getInstalledGamesSet
+        inst_set = getInstalledGamesSet()
+        installed_candidates = [g for g in content if g in inst_set]
+    except Exception as ex:
+        logger.warning(f"Error querying installed games set in getGameOfTheDay: {ex}")
             
     pool = installed_candidates if installed_candidates else content
     if seed_date:
@@ -718,8 +717,14 @@ def chooseGame(content, sampleSize=None):
     best_candidate = None
     min_played = 999999
 
+    try:
+        from aesgard.database import findGamesInfoBatch
+        batch_info = findGamesInfoBatch(sampled)
+    except Exception:
+        batch_info = {}
+
     for game in sampled:
-        info = findGameInfo(game)
+        info = batch_info.get(game)
         if info is None:
             return game
         times_played = info[2] or 0

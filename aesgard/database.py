@@ -22,8 +22,10 @@ FIELD_LASTTIMEPLAYED = 3
 FIELD_FINISHED = 4
 FIELD_FAVORITE = 5
 
+_INTEGRITY_CHECKED = False
+
 def init(server, user, password, database, dbtype, table_name="GamesChoosed"):
-    global SERVER, USER, PASSWORD, DATABASE, DBTYPE, TABLE_NAME
+    global SERVER, USER, PASSWORD, DATABASE, DBTYPE, TABLE_NAME, _INTEGRITY_CHECKED
     SERVER = server or ""
     USER = user or ""
     PASSWORD = password or ""
@@ -32,9 +34,11 @@ def init(server, user, password, database, dbtype, table_name="GamesChoosed"):
     # Sanitize table name to alphanumeric/underscore
     cleaned_table = "".join(c for c in (table_name or "GamesChoosed") if c.isalnum() or c == "_")
     TABLE_NAME = cleaned_table or "GamesChoosed"
+    _INTEGRITY_CHECKED = False
 
 def opencon():
     """Opens a database connection according to the configured DBTYPE."""
+    global _INTEGRITY_CHECKED
     if "mysql" == DBTYPE:
         import pymysql
         return pymysql.connect(
@@ -56,22 +60,34 @@ def opencon():
 
     # Default to sqlite
     conn = sl.connect(DATABASE if DATABASE.endswith(".db") else "Games.db")
-    if not tablesExists(conn):
-        with conn:
-            conn.execute(f"""
-                CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
-                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                    gameName TEXT UNIQUE,
-                    timesPlayed INTEGER DEFAULT 0,
-                    lastTimePlayed DATETIME,
-                    finished INTEGER DEFAULT 0,
-                    favorite INTEGER DEFAULT 0,
-                    installed INTEGER DEFAULT 1
-                );
-            """)
-            conn.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_gameName ON {TABLE_NAME}(LOWER(gameName));")
-    else:
-        ensureDatabaseIntegrity(conn)
+    
+    # Performance PRAGMAs for SQLite
+    try:
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA synchronous = NORMAL;")
+        conn.execute("PRAGMA cache_size = -64000;")
+        conn.execute("PRAGMA temp_store = MEMORY;")
+    except Exception:
+        pass
+
+    if not _INTEGRITY_CHECKED:
+        if not tablesExists(conn):
+            with conn:
+                conn.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        gameName TEXT UNIQUE,
+                        timesPlayed INTEGER DEFAULT 0,
+                        lastTimePlayed DATETIME,
+                        finished INTEGER DEFAULT 0,
+                        favorite INTEGER DEFAULT 0,
+                        installed INTEGER DEFAULT 1
+                    );
+                """)
+                _createIndexes(conn)
+        else:
+            ensureDatabaseIntegrity(conn)
+        _INTEGRITY_CHECKED = True
     return conn
 
 def ensureDatabaseIntegrity(conn):
@@ -137,12 +153,29 @@ def ensureDatabaseIntegrity(conn):
             conn.commit()
             logger.info("Successfully consolidated historical duplicates.")
 
-        # 2. Ensure unique index on LOWER(gameName)
-        cursor.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_gameName ON {TABLE_NAME}(LOWER(gameName));")
-        conn.commit()
+        # 2. Ensure all performance indexes exist
+        _createIndexes(conn)
         cursor.close()
     except Exception as e:
         logger.warning(f"Database integrity check warning: {e}")
+
+def _createIndexes(conn):
+    """Creates performance indexes for gameName, installed status, and list ordering."""
+    if DBTYPE != "sqlite":
+        return
+    try:
+        cursor = conn.cursor()
+        cursor.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS idx_games_gamename ON {TABLE_NAME}(gameName);")
+        cursor.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_gameName ON {TABLE_NAME}(LOWER(gameName));")
+        cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_games_installed ON {TABLE_NAME}(installed);")
+        cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_games_favorite ON {TABLE_NAME}(favorite);")
+        cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_games_timesPlayed ON {TABLE_NAME}(timesPlayed);")
+        cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_games_order ON {TABLE_NAME}(favorite DESC, timesPlayed ASC, gameName ASC);")
+        cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_games_inst_order ON {TABLE_NAME}(installed, favorite DESC, timesPlayed ASC, gameName ASC);")
+        conn.commit()
+        cursor.close()
+    except Exception as e:
+        logger.warning(f"Error creating performance indexes: {e}")
 
 def tablesExists(con):
     cursor = con.cursor()
@@ -311,7 +344,7 @@ def importContentToDatabase(content, defaultInstalled=1):
 
 def getDatabaseStats():
     """
-    Returns aggregated statistics from database:
+    Returns aggregated statistics from database in a single query:
     total_games, total_played, finished_count, favorite_count, unplayed_count,
     installed_count, uninstalled_count, completion_rate
     """
@@ -330,36 +363,27 @@ def getDatabaseStats():
         conn = opencon()
         cursor = conn.cursor()
         
-        cursor.execute(f"SELECT COUNT(*), COALESCE(SUM(timesPlayed), 0) FROM {TABLE_NAME}")
+        # Single consolidated query instead of 6 separate full-table queries
+        cursor.execute(f"""
+            SELECT 
+                COUNT(*), 
+                COALESCE(SUM(timesPlayed), 0),
+                COALESCE(SUM(CASE WHEN finished = 1 THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN favorite = 1 THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN timesPlayed = 0 THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN installed = 1 THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN installed = 0 THEN 1 ELSE 0 END), 0)
+            FROM {TABLE_NAME}
+        """)
         row = cursor.fetchone()
         if row:
             stats["total_games"] = row[0] or 0
             stats["total_played"] = row[1] or 0
-
-        cursor.execute(f"SELECT COUNT(*) FROM {TABLE_NAME} WHERE finished = 1")
-        row = cursor.fetchone()
-        if row:
-            stats["finished_count"] = row[0] or 0
-
-        cursor.execute(f"SELECT COUNT(*) FROM {TABLE_NAME} WHERE favorite = 1")
-        row = cursor.fetchone()
-        if row:
-            stats["favorite_count"] = row[0] or 0
-
-        cursor.execute(f"SELECT COUNT(*) FROM {TABLE_NAME} WHERE timesPlayed = 0")
-        row = cursor.fetchone()
-        if row:
-            stats["unplayed_count"] = row[0] or 0
-
-        cursor.execute(f"SELECT COUNT(*) FROM {TABLE_NAME} WHERE installed = 1")
-        row = cursor.fetchone()
-        if row:
-            stats["installed_count"] = row[0] or 0
-
-        cursor.execute(f"SELECT COUNT(*) FROM {TABLE_NAME} WHERE installed = 0")
-        row = cursor.fetchone()
-        if row:
-            stats["uninstalled_count"] = row[0] or 0
+            stats["finished_count"] = row[2] or 0
+            stats["favorite_count"] = row[3] or 0
+            stats["unplayed_count"] = row[4] or 0
+            stats["installed_count"] = row[5] or 0
+            stats["uninstalled_count"] = row[6] or 0
 
         if stats["total_games"] > 0:
             stats["completion_rate"] = round((stats["finished_count"] / stats["total_games"]) * 100, 1)
@@ -371,6 +395,92 @@ def getDatabaseStats():
         if conn:
             conn.close()
     return stats
+
+def getInstalledGamesSet():
+    """Returns a set of all gameNames where installed = 1 in a single fast query."""
+    conn = None
+    try:
+        conn = opencon()
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT gameName FROM {TABLE_NAME} WHERE installed = 1")
+        return {r[0] for r in cursor.fetchall()}
+    except Exception as e:
+        logger.error(f"Error fetching installed games set: {e}")
+        return set()
+    finally:
+        if conn:
+            conn.close()
+
+def getUninstalledGamesSet():
+    """Returns a set of all gameNames where installed = 0 in a single fast query."""
+    conn = None
+    try:
+        conn = opencon()
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT gameName FROM {TABLE_NAME} WHERE installed = 0")
+        return {r[0] for r in cursor.fetchall()}
+    except Exception as e:
+        logger.error(f"Error fetching uninstalled games set: {e}")
+        return set()
+    finally:
+        if conn:
+            conn.close()
+
+def getFavoriteGamesSet():
+    """Returns a set of all gameNames where favorite = 1 in a single fast query."""
+    conn = None
+    try:
+        conn = opencon()
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT gameName FROM {TABLE_NAME} WHERE favorite = 1")
+        return {r[0] for r in cursor.fetchall()}
+    except Exception as e:
+        logger.error(f"Error fetching favorite games set: {e}")
+        return set()
+    finally:
+        if conn:
+            conn.close()
+
+def getPlayedGamesSet():
+    """Returns a set of all gameNames where timesPlayed > 0 in a single fast query."""
+    conn = None
+    try:
+        conn = opencon()
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT gameName FROM {TABLE_NAME} WHERE timesPlayed > 0")
+        return {r[0] for r in cursor.fetchall()}
+    except Exception as e:
+        logger.error(f"Error fetching played games set: {e}")
+        return set()
+    finally:
+        if conn:
+            conn.close()
+
+def findGamesInfoBatch(gameNames):
+    """
+    Finds game rows for multiple games in a single query.
+    Returns dict: {gameName: (id, gameName, timesPlayed, lastTimePlayed, finished, favorite, installed)}
+    """
+    if not gameNames:
+        return {}
+    ph = _get_placeholder()
+    placeholders = ",".join([ph] * len(gameNames))
+    sql = f"SELECT id, gameName, timesPlayed, lastTimePlayed, finished, favorite, installed FROM {TABLE_NAME} WHERE gameName IN ({placeholders})"
+    conn = None
+    results = {}
+    try:
+        conn = opencon()
+        cursor = conn.cursor()
+        cursor.execute(sql, tuple(gameNames))
+        for row in cursor.fetchall():
+            results[row[1]] = row
+        cursor.close()
+    except Exception as e:
+        logger.error(f"Error querying batch game info: {e}")
+    finally:
+        if conn:
+            conn.close()
+    return results
 
 def getGamesList(searchQuery="", statusFilter="all", limit=1000, offset=0, filterText=None):
     """

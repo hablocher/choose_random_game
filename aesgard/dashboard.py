@@ -33,7 +33,8 @@ from aesgard.gameutil import (
 from aesgard.playnite import PLAYNITE_PREFIX
 from aesgard.database import (
     getDatabaseStats, getGamesList, setFinished, setFavorite,
-    findGameInfo, getRandomGoty, getAllGotys, importContentToDatabase
+    findGameInfo, getRandomGoty, getAllGotys, importContentToDatabase,
+    getInstalledGamesSet, getUninstalledGamesSet, getFavoriteGamesSet, getPlayedGamesSet
 )
 from aesgard.ui import formatDisplayName, detectPlatform, getPlatformColor, clearPlayniteMetaCache
 from aesgard.intel_dialog import GameIntelDialog
@@ -378,6 +379,12 @@ class GamingDashboard(QMainWindow):
         # View 4: Histórico de Lives Anteriores
         self.viewLiveHistory = self.buildLiveHistoryView()
         self.stack.addWidget(self.viewLiveHistory)
+
+        # Debounce timer for search
+        self._searchTimer = QTimer(self)
+        self._searchTimer.setSingleShot(True)
+        self._searchTimer.setInterval(250)
+        self._searchTimer.timeout.connect(self.refreshTable)
 
         # Load Initial Data
         self.updateHeroDisplay(self.currentChoice)
@@ -1710,6 +1717,7 @@ class GamingDashboard(QMainWindow):
 
             titleItem = QTableWidgetItem(f"{'⭐ ' if favorite else ''}{display_title}")
             titleItem.setData(Qt.ItemDataRole.UserRole, game_name)
+            titleItem.setData(Qt.ItemDataRole.UserRole + 1, installed)
             
             platItem = QTableWidgetItem(platform)
             platItem.setForeground(QColor(getPlatformColor(platform)))
@@ -1740,7 +1748,7 @@ class GamingDashboard(QMainWindow):
             self.table.setItem(row_idx, 5, statusItem)
 
     def onSearchChanged(self, text):
-        self.refreshTable()
+        self._searchTimer.start(250)
 
     def onFilterChanged(self, idx):
         self.refreshTable()
@@ -1750,9 +1758,11 @@ class GamingDashboard(QMainWindow):
         if row >= 0:
             item = self.table.item(row, 0)
             if item:
-                target = item.data(Qt.ItemDataRole.UserRole)
-                info = findGameInfo(target)
-                is_installed = (info[6] == 1) if (info and len(info) >= 7) else 1
+                is_installed = item.data(Qt.ItemDataRole.UserRole + 1)
+                if is_installed is None:
+                    target = item.data(Qt.ItemDataRole.UserRole)
+                    info = findGameInfo(target)
+                    is_installed = (info[6] == 1) if (info and len(info) >= 7) else 1
                 if is_installed:
                     self.btnPlaySelected.setText("▶ Jogar Selecionado")
                 else:
@@ -1763,20 +1773,17 @@ class GamingDashboard(QMainWindow):
         filtered_content = self.content
 
         if "Apenas Instalados" in filter_mode:
-            inst_rows = getGamesList(statusFilter="installed", limit=50000)
-            inst_names = {r[1] for r in inst_rows}
+            inst_names = getInstalledGamesSet()
             filtered_content = [g for g in self.content if g in inst_names]
             if not filtered_content and inst_names:
                 filtered_content = list(inst_names)
         elif "Apenas Não Instalados" in filter_mode:
-            uninst_rows = getGamesList(statusFilter="uninstalled", limit=50000)
-            uninst_names = {r[1] for r in uninst_rows}
+            uninst_names = getUninstalledGamesSet()
             filtered_content = [g for g in self.content if g in uninst_names]
             if not filtered_content and uninst_names:
                 filtered_content = list(uninst_names)
         elif "Favoritos" in filter_mode:
-            fav_rows = getGamesList(statusFilter="favorite", limit=50000)
-            fav_names = {r[1] for r in fav_rows}
+            fav_names = getFavoriteGamesSet()
             filtered_content = [g for g in self.content if g in fav_names]
             if not filtered_content and fav_names:
                 filtered_content = list(fav_names)
@@ -2119,8 +2126,7 @@ class GamingDashboard(QMainWindow):
                 self.onRerollHero()
             return
         elif mode == "backlog":
-            played_rows = getGamesList(statusFilter="played", limit=50000)
-            played_names = {r[1] for r in played_rows}
+            played_names = getPlayedGamesSet()
             zeros = [g for g in self.content if g not in played_names]
             if zeros:
                 new_choice = chooseGame(zeros, sampleSize=getattr(self.config, 'randomSampleSize', 25))
