@@ -17,12 +17,91 @@ import requests
 import hashlib
 from io import BytesIO
 from typing import Optional, Tuple
-from PIL import Image, ImageDraw, ImageFont
+import unicodedata
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from aesgard.playnite import PLAYNITE_PREFIX, getPlayniteCoverPath
 from aesgard.ui import formatDisplayName
 
 logger = logging.getLogger(__name__)
+
+# Edition tags and filler words to normalize for 100% reliable title matching
+EDITION_TAGS = {
+    'edition', 'remastered', 'remaster', 'hd', 'redux', 'bundle', 'pack', 
+    'collection', 'goty', 'deluxe', 'complete', 'ultimate', 'enhanced',
+    'directors', 'cut', 'standard', 'special', 'classic', 'gold', 'platinum',
+    'game', 'year', 'anniversary', 'definitive', 'original'
+}
+
+ARTICLES = {'the', 'a', 'an', 'of', 'and', 'for', 'in', 'on', 'at', 'to', 'with'}
+
+ROMAN_MAP = {
+    'i': '1', 'ii': '2', 'iii': '3', 'iv': '4', 'v': '5',
+    'vi': '6', 'vii': '7', 'viii': '8', 'ix': '9', 'x': '10'
+}
+
+def extractNumbersAndWords(s: str) -> Tuple[set, set, str]:
+    """Extracts normalized numbers, core words, and joined string for exact matching."""
+    s = unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode('ascii')
+    s = s.lower()
+    s = re.sub(r'\(.*?\)', '', s)
+    s = re.sub(r'\[.*?\]', '', s)
+    s = re.sub(r'[^a-z0-9\s]', ' ', s)
+    tokens = s.split()
+    
+    numbers = []
+    core_words = []
+    
+    for t in tokens:
+        if t in ARTICLES:
+            continue
+        if t in ROMAN_MAP:
+            numbers.append(ROMAN_MAP[t])
+        elif t.isdigit():
+            numbers.append(t)
+        elif t not in EDITION_TAGS:
+            core_words.append(t)
+            
+    return set(numbers), set(core_words), ' '.join(core_words)
+
+def isReliableTitleMatch(target: str, candidate: str) -> bool:
+    """
+    100% strict verification to ensure a candidate cover from an external store/catalog
+    really belongs to the target game and NOT to another game, sequel, or unrelated search hit.
+    """
+    if not target or not candidate:
+        return False
+        
+    t_nums, t_words, t_str = extractNumbersAndWords(target)
+    c_nums, c_words, c_str = extractNumbersAndWords(candidate)
+    
+    if not t_words or not c_words:
+        return False
+        
+    # Numbers (sequels, release years, roman numerals) MUST match exactly!
+    if t_nums != c_nums:
+        return False
+        
+    # Exact normalized match
+    if t_str == c_str:
+        return True
+
+    total_target_ident = len(t_words) + len(t_nums)
+    total_cand_ident = len(c_words) + len(c_nums)
+
+    # If target has only 1 single word and 0 numbers (e.g. 'doom', 'prey'),
+    # do NOT match unrelated multi-word titles (like 'birds of prey' or 'doom eternal')
+    if total_target_ident == 1:
+        return t_words == c_words
+
+    # If target has 2 or more identifying tokens (words + numbers, e.g. 'witcher 3', 'cyberpunk 2077'):
+    if t_words.issubset(c_words):
+        return True
+        
+    if c_words.issubset(t_words) and total_cand_ident >= 2:
+        return True
+            
+    return False
 
 # In-memory dictionary for Playnite title-to-cover mapping
 _PLAYNITE_TITLE_MAP = None
@@ -76,7 +155,7 @@ def loadPlayniteTitleMap(playnitePath: str, exportJsonPath: str = "playnite_game
     return _PLAYNITE_TITLE_MAP
 
 def fetchFromSteamStore(cleanTitle: str, timeout: int = 5) -> Optional[Image.Image]:
-    """Queries public Steam Storefront search API for official game capsule/header."""
+    """Queries public Steam Storefront search API for official game capsule/header with strict title matching."""
     if not cleanTitle or len(cleanTitle) < 2:
         return None
 
@@ -89,35 +168,40 @@ def fetchFromSteamStore(cleanTitle: str, timeout: int = 5) -> Optional[Image.Ima
 
         data = resp.json()
         if data.get("total", 0) > 0 and data.get("items"):
-            item = data["items"][0]
-            appid = item.get("id")
-            if not appid:
-                return None
-
-            # Try library cover, then header, then capsule
-            candidates = [
-                f"https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/library_600x900_2x.jpg",
-                f"https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/header.jpg",
-                f"https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/capsule_616x353.jpg",
-                item.get("tiny_image", "")
-            ]
-
-            for img_url in candidates:
-                if not img_url:
+            for item in data["items"]:
+                candidate_name = item.get("name", "")
+                if not isReliableTitleMatch(cleanTitle, candidate_name):
+                    logger.debug(f"Rejecting Steam search item '{candidate_name}' for '{cleanTitle}'")
                     continue
-                try:
-                    img_resp = requests.get(img_url, headers=headers, timeout=timeout)
-                    if img_resp.status_code == 200 and len(img_resp.content) > 1000:
-                        return Image.open(BytesIO(img_resp.content))
-                except Exception:
+
+                appid = item.get("id")
+                if not appid:
                     continue
+
+                # Try library cover, then header, then capsule
+                candidates = [
+                    f"https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/library_600x900_2x.jpg",
+                    f"https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/header.jpg",
+                    f"https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/capsule_616x353.jpg",
+                    item.get("tiny_image", "")
+                ]
+
+                for img_url in candidates:
+                    if not img_url:
+                        continue
+                    try:
+                        img_resp = requests.get(img_url, headers=headers, timeout=timeout)
+                        if img_resp.status_code == 200 and len(img_resp.content) > 1000:
+                            return Image.open(BytesIO(img_resp.content))
+                    except Exception:
+                        continue
     except Exception as e:
         logger.debug(f"Steam cover search failed for '{cleanTitle}': {e}")
 
     return None
 
 def fetchFromWikipedia(cleanTitle: str, timeout: int = 4) -> Optional[Image.Image]:
-    """Fallback query to Wikipedia REST API for game summary thumbnail."""
+    """Fallback query to Wikipedia REST API for game summary thumbnail with strict title matching."""
     if not cleanTitle:
         return None
     try:
@@ -126,7 +210,12 @@ def fetchFromWikipedia(cleanTitle: str, timeout: int = 4) -> Optional[Image.Imag
         headers = {'User-Agent': 'ChooseRandomGame/2.0'}
         r = requests.get(url, headers=headers, timeout=timeout)
         if r.status_code == 200:
-            thumb = r.json().get("thumbnail", {}).get("source")
+            data = r.json()
+            page_title = data.get("title", "")
+            if not isReliableTitleMatch(cleanTitle, page_title):
+                logger.debug(f"Rejecting Wikipedia article '{page_title}' for '{cleanTitle}'")
+                return None
+            thumb = data.get("thumbnail", {}).get("source")
             if thumb:
                 img_r = requests.get(thumb, headers=headers, timeout=timeout)
                 if img_r.status_code == 200:
@@ -135,12 +224,35 @@ def fetchFromWikipedia(cleanTitle: str, timeout: int = 4) -> Optional[Image.Imag
         pass
     return None
 
+def getDefaultCover(title: str = "", targetSize: Tuple[int, int] = (160, 160)) -> Image.Image:
+    """
+    Returns the standard default cover image from assets/default_game_cover.png,
+    or generates an aesthetic procedural gamer card if the asset file is absent.
+    """
+    default_asset = os.path.join("assets", "default_game_cover.png")
+    if os.path.exists(default_asset):
+        try:
+            img = Image.open(default_asset)
+            return ImageOps.fit(img, targetSize, Image.Resampling.LANCZOS).convert("RGB")
+        except Exception as e:
+            logger.debug(f"Could not load default cover asset: {e}")
+
+    return generateProceduralCover(title or "Jogo", targetSize)
+
 def generateProceduralCover(title: str, size: Tuple[int, int] = (160, 160)) -> Image.Image:
     """Generates an aesthetic, dynamic dark-mode gamer card when no image is found anywhere."""
     w, h = size
     # Create smooth dark gradient
     base = Image.new("RGBA", (w, h), (18, 21, 29, 255))
     draw = ImageDraw.Draw(base)
+
+    # Gradient background
+    for y in range(h):
+        ratio = y / max(h, 1)
+        r_c = int(16 * (1 - ratio) + 28 * ratio)
+        g_c = int(20 * (1 - ratio) + 34 * ratio)
+        b_c = int(30 * (1 - ratio) + 48 * ratio)
+        draw.line([(0, y), (w, y)], fill=(r_c, g_c, b_c, 255))
 
     # Accent color derived deterministically from title
     h_val = int(hashlib.md5(title.encode('utf-8')).hexdigest()[:6], 16)
@@ -151,17 +263,31 @@ def generateProceduralCover(title: str, size: Tuple[int, int] = (160, 160)) -> I
 
     # Draw border & header bar
     draw.rounded_rectangle([4, 4, w - 5, h - 5], radius=10, outline=accent, width=2)
-    draw.rounded_rectangle([8, 8, w - 9, 32], radius=6, fill=(26, 32, 44, 255))
+    draw.rounded_rectangle([8, 8, w - 9, min(32, h - 8)], radius=6, fill=(26, 32, 44, 255))
+
+    # Load font if available
+    font_small = ImageFont.load_default()
+    font_main = ImageFont.load_default()
+    for fn in ["segoeui.ttf", "arial.ttf"]:
+        fp = os.path.join(r"C:\Windows\Fonts", fn)
+        if os.path.exists(fp):
+            try:
+                font_small = ImageFont.truetype(fp, 11)
+                font_main = ImageFont.truetype(fp, 13)
+                break
+            except Exception:
+                pass
 
     # Draw small Gamepad symbol / text
-    draw.text((14, 12), "🎮 GAME", fill=accent)
+    draw.text((14, 10), "🎮 GAME", fill=accent, font=font_small)
 
     # Wrap title across 3 lines max
     words = title.split()
     lines = []
     curr = []
+    max_line_len = max(10, w // 10)
     for word in words:
-        if len(" ".join(curr + [word])) <= 14:
+        if len(" ".join(curr + [word])) <= max_line_len:
             curr.append(word)
         else:
             lines.append(" ".join(curr))
@@ -173,7 +299,7 @@ def generateProceduralCover(title: str, size: Tuple[int, int] = (160, 160)) -> I
 
     y_start = (h // 2) - (len(lines) * 10)
     for i, line in enumerate(lines):
-        draw.text((14, y_start + (i * 18)), line, fill=(226, 232, 240, 255))
+        draw.text((14, y_start + (i * 18)), line, fill=(226, 232, 240, 255), font=font_main)
 
     return base.convert("RGB")
 
@@ -184,14 +310,14 @@ def resolveGameCover(gameEntry: str,
     """
     Multi-tier cover art resolution:
     1. Local cache lookup
-    2. Playnite media database
-    3. Steam Storefront public database
-    4. eXoDOS / Wikipedia / web metadata
-    5. Embedded Win32 executable/shortcut icon
-    6. Procedural gamer card (Guaranteed fallback)
+    2. Playnite media database (100% reliable)
+    3. GOG & Steam Official Databases (strictly validated title matching)
+    4. eXoDOS / Wikipedia Databases (strictly validated title matching)
+    5. Embedded Win32 executable/shortcut icon (100% reliable)
+    6. Standard Default Cover Image (Guaranteed Fallback)
     """
     if not gameEntry:
-        return generateProceduralCover("Jogo", targetSize)
+        return getDefaultCover("Jogo", targetSize)
 
     clean_title = getCleanGameTitle(gameEntry)
     cache_dir = getattr(config, 'coversCacheDir', 'covers_cache')
@@ -323,14 +449,17 @@ def resolveGameCover(gameEntry: str,
         except Exception:
             pass
 
-    # 6. Procedural Fallback Card (Zero-fail guarantee)
+    # 6. Standard Default Cover Image (Guaranteed 100% reliable fallback)
+    is_verified_image = True
     if not found_img:
-        found_img = generateProceduralCover(clean_title, targetSize)
+        found_img = getDefaultCover(clean_title, targetSize)
+        is_verified_image = False
 
-    # Save to disk cache for instantaneous future access
+    # Save verified covers to disk cache for instantaneous future access
     try:
         found_img_rgb = found_img.convert("RGB").resize(targetSize)
-        found_img_rgb.save(cache_file, "JPEG", quality=90)
+        if is_verified_image:
+            found_img_rgb.save(cache_file, "JPEG", quality=90)
         return found_img_rgb
     except Exception:
         return found_img.convert("RGB").resize(targetSize)

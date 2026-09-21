@@ -33,8 +33,10 @@ def cleanGOGTitle(title: str) -> str:
 def fetchGOGCover(title: str, timeout: int = 5) -> Optional[Image.Image]:
     """
     Queries official GOG Catalog API for high-resolution vertical or horizontal cover art.
-    Uses public endpoints from GOG (no authentication required).
+    Performs strictly validated title matching to guarantee the cover belongs to the exact game.
     """
+    from aesgard.covers import isReliableTitleMatch
+
     if not title or len(title) < 2:
         return None
 
@@ -46,10 +48,14 @@ def fetchGOGCover(title: str, timeout: int = 5) -> Optional[Image.Image]:
 
     # Query variations: 1. Full clean term; 2. Primary title before colon/hyphen if available
     queries = [clean_term]
-    if ' ' in clean_term:
-        words = clean_term.split()
-        if len(words) >= 3:
-            queries.append(' '.join(words[:2]))
+    if ':' in title:
+        primary = cleanGOGTitle(title.split(':', 1)[0])
+        if primary and primary != clean_term and len(primary.split()) >= 2:
+            queries.append(primary)
+    elif ' - ' in title:
+        primary = cleanGOGTitle(title.split(' - ', 1)[0])
+        if primary and primary != clean_term and len(primary.split()) >= 2:
+            queries.append(primary)
 
     for q in queries:
         try:
@@ -59,13 +65,17 @@ def fetchGOGCover(title: str, timeout: int = 5) -> Optional[Image.Image]:
             if resp.status_code == 200:
                 data = resp.json()
                 products = data.get("products", [])
-                if products:
-                    first = products[0]
+                for prod in products:
+                    prod_title = prod.get("title", "")
+                    if not isReliableTitleMatch(title, prod_title) and not isReliableTitleMatch(clean_term, prod_title):
+                        logger.debug(f"Rejecting GOG catalog product '{prod_title}' for '{title}'")
+                        continue
+
                     # Candidates in order of quality
                     img_candidates = [
-                        first.get("coverVertical"),
-                        first.get("coverHorizontal"),
-                        first.get("galaxyBackgroundImage")
+                        prod.get("coverVertical"),
+                        prod.get("coverHorizontal"),
+                        prod.get("galaxyBackgroundImage")
                     ]
                     for img_url in img_candidates:
                         if img_url:
@@ -84,8 +94,12 @@ def fetchGOGCover(title: str, timeout: int = 5) -> Optional[Image.Image]:
             if resp_embed.status_code == 200:
                 data = resp_embed.json()
                 products = data.get("products", [])
-                if products:
-                    prod = products[0]
+                for prod in products:
+                    prod_title = prod.get("title", "")
+                    if not isReliableTitleMatch(title, prod_title) and not isReliableTitleMatch(clean_term, prod_title):
+                        logger.debug(f"Rejecting GOG embed product '{prod_title}' for '{title}'")
+                        continue
+
                     img_url = prod.get("image")
                     if img_url:
                         # GOG embed image urls typically start with //

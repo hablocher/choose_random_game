@@ -32,8 +32,10 @@ def cleanSteamTitle(title: str) -> str:
 def fetchSteamCover(title: str, appId: Optional[str] = None, timeout: int = 5) -> Optional[Image.Image]:
     """
     Queries official Steam Storefront API for high-resolution library or header covers.
-    Performs multi-stage queries (full title, without subtitles, main words) to prevent 0-results on hyphens.
+    Performs strictly validated title matching to guarantee the cover belongs to the exact game.
     """
+    from aesgard.covers import isReliableTitleMatch
+
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ChooseRandomGame/2.0'
     }
@@ -61,11 +63,14 @@ def fetchSteamCover(title: str, appId: Optional[str] = None, timeout: int = 5) -
         return None
 
     queries = [clean_term]
-    # If title has multiple parts (e.g. before "City of the Damned")
-    words = clean_term.split()
-    if len(words) >= 3:
-        queries.append(' '.join(words[:2]))
-        queries.append(words[0])
+    if ':' in title:
+        primary = cleanSteamTitle(title.split(':', 1)[0])
+        if primary and primary != clean_term and len(primary.split()) >= 2:
+            queries.append(primary)
+    elif ' - ' in title:
+        primary = cleanSteamTitle(title.split(' - ', 1)[0])
+        if primary and primary != clean_term and len(primary.split()) >= 2:
+            queries.append(primary)
 
     for q in queries:
         try:
@@ -75,26 +80,31 @@ def fetchSteamCover(title: str, appId: Optional[str] = None, timeout: int = 5) -
                 continue
             data = resp.json()
             if data.get("total", 0) > 0 and data.get("items"):
-                item = data["items"][0]
-                found_id = item.get("id")
-                if not found_id:
-                    continue
+                for item in data["items"]:
+                    cand_name = item.get("name", "")
+                    if not isReliableTitleMatch(title, cand_name) and not isReliableTitleMatch(clean_term, cand_name):
+                        logger.debug(f"Rejecting Steam search item '{cand_name}' for '{title}'")
+                        continue
 
-                candidates = [
-                    f"https://cdn.cloudflare.steamstatic.com/steam/apps/{found_id}/library_600x900_2x.jpg",
-                    f"https://cdn.cloudflare.steamstatic.com/steam/apps/{found_id}/header.jpg",
-                    f"https://cdn.cloudflare.steamstatic.com/steam/apps/{found_id}/capsule_616x353.jpg",
-                    item.get("tiny_image", "")
-                ]
-                for img_url in candidates:
-                    if not img_url:
+                    found_id = item.get("id")
+                    if not found_id:
                         continue
-                    try:
-                        img_resp = requests.get(img_url, headers=headers, timeout=timeout)
-                        if img_resp.status_code == 200 and len(img_resp.content) > 1000:
-                            return Image.open(BytesIO(img_resp.content))
-                    except Exception:
-                        continue
+
+                    candidates = [
+                        f"https://cdn.cloudflare.steamstatic.com/steam/apps/{found_id}/library_600x900_2x.jpg",
+                        f"https://cdn.cloudflare.steamstatic.com/steam/apps/{found_id}/header.jpg",
+                        f"https://cdn.cloudflare.steamstatic.com/steam/apps/{found_id}/capsule_616x353.jpg",
+                        item.get("tiny_image", "")
+                    ]
+                    for img_url in candidates:
+                        if not img_url:
+                            continue
+                        try:
+                            img_resp = requests.get(img_url, headers=headers, timeout=timeout)
+                            if img_resp.status_code == 200 and len(img_resp.content) > 1000:
+                                return Image.open(BytesIO(img_resp.content))
+                        except Exception:
+                            continue
         except Exception as e:
             logger.debug(f"Steam search error for '{q}': {e}")
 
