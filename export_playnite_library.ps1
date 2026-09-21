@@ -9,7 +9,7 @@
 param (
     [string]$PlaynitePath = "E:\Util\Playnite",
     [string]$OutputFile = "$PSScriptRoot\playnite_games.json",
-    [switch]$OnlyInstalled = $true
+    [switch]$OnlyInstalled = $false
 )
 
 $dbPath = Join-Path $PlaynitePath "library\games.db"

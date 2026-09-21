@@ -27,13 +27,13 @@ from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import QFont, QPixmap, QImage, QColor, QIcon
 
 from aesgard.gameutil import (
-    executeGame, findGameIcon, chooseGame,
+    executeGame, installGame, scanAllSources, findGameIcon, chooseGame,
     getGameOfTheDay, linkPrefix, exodosPrefix
 )
 from aesgard.playnite import PLAYNITE_PREFIX
 from aesgard.database import (
     getDatabaseStats, getGamesList, setFinished, setFavorite,
-    findGameInfo, getRandomGoty, getAllGotys
+    findGameInfo, getRandomGoty, getAllGotys, importContentToDatabase
 )
 from aesgard.ui import formatDisplayName, detectPlatform, getPlatformColor
 from aesgard.intel_dialog import GameIntelDialog
@@ -57,20 +57,20 @@ QFrame#StatCard {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1a1e29, stop:1 #131722);
     border: 1px solid #2a3142;
     border-radius: 10px;
-    padding: 10px;
+    padding: 6px 8px;
 }
 
 QLabel#StatValue {
-    font-size: 22px;
+    font-size: 20px;
     font-weight: bold;
     color: #00cec9;
 }
 
 QLabel#StatLabel {
-    font-size: 11px;
+    font-size: 10px;
     color: #8c96a8;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
 }
 
 /* Nav Tabs */
@@ -79,9 +79,9 @@ QPushButton.NavBtn {
     border: 1px solid #2b3244;
     border-radius: 8px;
     color: #a0aec0;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: bold;
-    padding: 8px 18px;
+    padding: 7px 12px;
 }
 QPushButton.NavBtn:hover {
     background-color: #1f2533;
@@ -363,10 +363,10 @@ class GamingDashboard(QMainWindow):
         self.chatChoiceTrio = []
 
         self.setWindowTitle("Choose Random Game - Gaming Dashboard & Live Stream Assistant")
-        w = getattr(self.config, 'uiWindowWidth', 1180)
-        h = getattr(self.config, 'uiWindowHeight', 740)
-        min_w = getattr(self.config, 'uiMinWidth', 960)
-        min_h = getattr(self.config, 'uiMinHeight', 600)
+        w = getattr(self.config, 'uiWindowWidth', 1280)
+        h = getattr(self.config, 'uiWindowHeight', 780)
+        min_w = getattr(self.config, 'uiMinWidth', 1100)
+        min_h = getattr(self.config, 'uiMinHeight', 680)
         self.resize(w, h)
         self.setMinimumSize(min_w, min_h)
         self.setStyleSheet(STYLESHEET)
@@ -429,26 +429,35 @@ class GamingDashboard(QMainWindow):
     # -------------------------------------------------------------
     def buildHeaderSection(self):
         headerLayout = QHBoxLayout()
-        headerLayout.setSpacing(14)
+        headerLayout.setSpacing(10)
 
         # App Title & Subtitle
         titleBox = QVBoxLayout()
+        titleBox.setSpacing(1)
         titleLabel = QLabel("🎮 CHOOSE RANDOM GAME")
-        titleLabel.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        titleLabel.setStyleSheet("color: #ffffff; letter-spacing: 1px;")
+        titleLabel.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        titleLabel.setStyleSheet("color: #ffffff; letter-spacing: 0.5px;")
         
-        subtitleLabel = QLabel("Gaming Backlog, Jogo do Dia & Intelligent Random Launcher")
-        subtitleLabel.setFont(QFont("Segoe UI", 9))
+        subtitleLabel = QLabel("Gaming Backlog & Intelligent Random Launcher")
+        subtitleLabel.setFont(QFont("Segoe UI", 8))
         subtitleLabel.setStyleSheet("color: #8c96a8;")
         
         titleBox.addWidget(titleLabel)
         titleBox.addWidget(subtitleLabel)
         headerLayout.addLayout(titleBox)
 
+        # Synchronize Sources Button
+        self.btnSyncSources = QPushButton("🔄 Sincronizar Fontes")
+        self.btnSyncSources.setObjectName("BtnSecondary")
+        self.btnSyncSources.setToolTip("Re-importa e sincroniza todos os jogos (instalados ou não) de todas as fontes (Playnite, eXoDOS, atalhos, pastas)")
+        self.btnSyncSources.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnSyncSources.clicked.connect(self.onSyncSources)
+        headerLayout.addWidget(self.btnSyncSources)
+
         # Clean Database Button
         self.btnCleanDb = QPushButton("🧹 Limpar Banco")
         self.btnCleanDb.setObjectName("BtnSecondary")
-        self.btnCleanDb.setToolTip("Verifica jogos desinstalados no disco e limpa registros órfãos sem apagar arquivos")
+        self.btnCleanDb.setToolTip("Verifica jogos que não estão mais instalados e os marca como NÃO INSTALADOS (preserva histórico e favoritos)")
         self.btnCleanDb.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnCleanDb.clicked.connect(self.onCleanDatabase)
         headerLayout.addWidget(self.btnCleanDb)
@@ -511,13 +520,15 @@ class GamingDashboard(QMainWindow):
 
         headerLayout.addStretch()
 
-        # 4 Stat Cards
-        self.statTotal = self.createStatCard("17.800+", "CATÁLOGO")
+        # 5 Stat Cards
+        self.statTotal = self.createStatCard("0", "CATÁLOGO")
+        self.statInstalled = self.createStatCard("0", "INSTALADOS")
         self.statPlayed = self.createStatCard("0", "SESSÕES")
         self.statFinished = self.createStatCard("0", "ZERADOS")
         self.statBacklog = self.createStatCard("0%", "CONCLUÍDO")
 
         headerLayout.addWidget(self.statTotal)
+        headerLayout.addWidget(self.statInstalled)
         headerLayout.addWidget(self.statPlayed)
         headerLayout.addWidget(self.statFinished)
         headerLayout.addWidget(self.statBacklog)
@@ -557,19 +568,19 @@ class GamingDashboard(QMainWindow):
         self.btnNavMain.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnNavMain.clicked.connect(lambda: self.switchView(0))
 
-        self.btnNavGotd = QPushButton("🌟 Jogo do Dia (Apenas Instalados)")
+        self.btnNavGotd = QPushButton("🌟 Jogo do Dia")
         self.btnNavGotd.setProperty("class", "NavBtn")
         self.btnNavGotd.setCheckable(True)
         self.btnNavGotd.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnNavGotd.clicked.connect(lambda: self.switchView(1))
 
-        self.btnNavGoty = QPushButton("🏆 Jogos do Ano (GOTY - Todos)")
+        self.btnNavGoty = QPushButton("🏆 Jogos do Ano (GOTY)")
         self.btnNavGoty.setProperty("class", "NavBtn")
         self.btnNavGoty.setCheckable(True)
         self.btnNavGoty.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnNavGoty.clicked.connect(lambda: self.switchView(2))
 
-        self.btnNavChatChoice = QPushButton("🗳️ Escolha do Chat (Trio)")
+        self.btnNavChatChoice = QPushButton("🗳️ Escolha do Chat")
         self.btnNavChatChoice.setProperty("class", "NavBtn")
         self.btnNavChatChoice.setCheckable(True)
         self.btnNavChatChoice.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -703,11 +714,18 @@ class GamingDashboard(QMainWindow):
         headerText.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         headerText.setStyleSheet("color: #00cec9; letter-spacing: 1px;")
         
+        self.installBadge = QLabel("✔ INSTALADO")
+        self.installBadge.setObjectName("InstallBadge")
+        self.installBadge.setStyleSheet(
+            "background-color: #00b894; color: #ffffff; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;"
+        )
+
         self.platformBadge = QLabel("LOCAL")
         self.platformBadge.setObjectName("PlatformBadge")
         
         heroHeader.addWidget(headerText)
         heroHeader.addStretch()
+        heroHeader.addWidget(self.installBadge)
         heroHeader.addWidget(self.platformBadge)
         layout.addLayout(heroHeader)
 
@@ -782,6 +800,8 @@ class GamingDashboard(QMainWindow):
         self.comboRerollFilter = QComboBox()
         self.comboRerollFilter.addItems([
             "Todas as Fontes",
+            "Apenas Instalados (Prontos p/ Jogar)",
+            "Apenas Não Instalados (p/ Baixar)",
             "Apenas Favoritos (⭐)",
             "Apenas eXoDOS (Instalados)",
             "Apenas Atalhos / Desktop",
@@ -838,7 +858,7 @@ class GamingDashboard(QMainWindow):
 
         # Filter Dropdown
         self.filterCombo = QComboBox()
-        self.filterCombo.addItems(["Todos", "Não Jogados", "Zerados", "Favoritos"])
+        self.filterCombo.addItems(["Todos", "Instalados", "Não Instalados", "Não Jogados", "Zerados", "Favoritos"])
         self.filterCombo.currentIndexChanged.connect(self.onFilterChanged)
         topRow.addWidget(self.filterCombo)
 
@@ -846,22 +866,24 @@ class GamingDashboard(QMainWindow):
 
         # Table Widget
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["Jogo / Título", "Origem", "Vezes", "Último Acesso", "Status"])
+        self.table.setColumnCount(6)
+        self.table.setHorizontalHeaderLabels(["Jogo / Título", "Origem", "Instalação", "Vezes", "Último Acesso", "Status"])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.doubleClicked.connect(self.onTableDoubleClicked)
+        self.table.itemSelectionChanged.connect(self.onTableSelectionChanged)
         layout.addWidget(self.table, 1)
 
         # Bottom Actions for Selected Table Game
         botRow = QHBoxLayout()
-        hintLabel = QLabel("💡 Dica: Dê duplo clique em qualquer linha para jogar imediatamente")
+        hintLabel = QLabel("💡 Dica: Dê duplo clique em qualquer linha para jogar ou instalar")
         hintLabel.setStyleSheet("color: #718096; font-size: 11px;")
         botRow.addWidget(hintLabel)
         botRow.addStretch()
@@ -1404,13 +1426,63 @@ class GamingDashboard(QMainWindow):
         times_played = info[2] if info else 0
         finished = info[4] if info else 0
         fav = info[5] if info else 0
+        installed = info[6] if (info and len(info) >= 7) else 1
+
+        is_installed = bool(installed)
 
         status_text = "Zerado ✔" if finished else "Em aberto"
         fav_text = " • ⭐ Favorito" if fav else ""
-        self.gameStatsLabel.setText(f"Vezes jogado: {times_played}x • Status: {status_text}{fav_text}")
+        inst_text = " • ✔ Instalado" if is_installed else " • ⏳ Não Instalado"
+        self.gameStatsLabel.setText(f"Vezes jogado: {times_played}x • Status: {status_text}{fav_text}{inst_text}")
 
         self.btnFavorite.setText("⭐ Desfavoritar" if fav else "⭐ Favoritar")
         self.btnFinish.setText("✔ Desmarcar Zerado" if finished else "✔ Marcar Zerado")
+
+        if hasattr(self, 'installBadge'):
+            if is_installed:
+                self.installBadge.setText("✔ INSTALADO")
+                self.installBadge.setStyleSheet(
+                    "background-color: #00b894; color: #ffffff; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;"
+                )
+            else:
+                self.installBadge.setText("⏳ NÃO INSTALADO")
+                self.installBadge.setStyleSheet(
+                    "background-color: #6c5ce7; color: #ffffff; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;"
+                )
+
+        if is_installed:
+            self.btnPlay.setText("▶  JOGAR AGORA")
+            self.btnPlay.setStyleSheet("""
+                QPushButton#BtnPlay {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00b894, stop:1 #00cec9);
+                    color: #0d0f14;
+                    font-size: 14px;
+                    font-weight: bold;
+                    border: none;
+                    border-radius: 8px;
+                    padding: 12px;
+                }
+                QPushButton#BtnPlay:hover {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #55efc4, stop:1 #81ecec);
+                }
+            """)
+        else:
+            self.btnPlay.setText("📥  INSTALAR JOGO")
+            self.btnPlay.setStyleSheet("""
+                QPushButton#BtnPlay {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6c5ce7, stop:1 #a29bfe);
+                    color: #ffffff;
+                    font-size: 14px;
+                    font-weight: bold;
+                    border: none;
+                    border-radius: 8px;
+                    padding: 12px;
+                }
+                QPushButton#BtnPlay:hover {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #a29bfe, stop:1 #dfe6e9);
+                    color: #0d0f14;
+                }
+            """)
 
         # Load Icon
         try:
@@ -1454,8 +1526,29 @@ class GamingDashboard(QMainWindow):
         info = findGameInfo(gameEntry)
         times_played = info[2] if info else 0
         finished = info[4] if info else 0
+        installed = info[6] if (info and len(info) >= 7) else 1
+        is_installed = bool(installed)
+
         status_text = "Zerado ✔" if finished else "Em aberto"
-        self.gotdStatsLabel.setText(f"Vezes jogado: {times_played}x • Status: {status_text} • Pronto para rodar")
+        inst_text = "Pronto para rodar" if is_installed else "Não instalado"
+        self.gotdStatsLabel.setText(f"Vezes jogado: {times_played}x • Status: {status_text} • {inst_text}")
+
+        if is_installed:
+            self.btnGotdPlay.setText("▶  JOGAR JOGO DO DIA AGORA")
+            self.btnGotdPlay.setStyleSheet("")
+        else:
+            self.btnGotdPlay.setText("📥  INSTALAR JOGO DO DIA")
+            self.btnGotdPlay.setStyleSheet("""
+                QPushButton#BtnPlay {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6c5ce7, stop:1 #a29bfe);
+                    color: #ffffff;
+                    font-size: 14px;
+                    font-weight: bold;
+                    border: none;
+                    border-radius: 8px;
+                    padding: 12px;
+                }
+            """)
 
         try:
             pilImg = findGameIcon(
@@ -1472,9 +1565,21 @@ class GamingDashboard(QMainWindow):
 
     def onPlayGotd(self):
         target = self.currentGotd or self.currentChoice
-        logger.info(f"Launching Game of the Day: {target}")
-        self.showMinimized()
-        executeGame(target, self.steamOwnedGames)
+        info = findGameInfo(target)
+        is_installed = (info[6] == 1) if (info and len(info) >= 7) else 1
+
+        if is_installed:
+            logger.info(f"Launching Game of the Day: {target}")
+            self.showMinimized()
+            executeGame(target, self.steamOwnedGames)
+        else:
+            logger.info(f"Installing Game of the Day: {target}")
+            success = installGame(target)
+            if success:
+                QMessageBox.information(self, "Instalação", f"Comando de instalação acionado para:\n{formatDisplayName(target)}")
+            else:
+                QMessageBox.warning(self, "Instalação", f"Não foi possível disparar instalador automaticamente para:\n{formatDisplayName(target)}")
+
         self.refreshStats()
         self.refreshTable()
         if self.currentGotd:
@@ -1600,11 +1705,14 @@ class GamingDashboard(QMainWindow):
     def refreshStats(self):
         stats = getDatabaseStats()
         total = stats["total_games"]
+        installed = stats.get("installed_count", total)
         played = stats["total_played"]
         finished = stats["finished_count"]
         rate = stats["completion_rate"]
 
         self.statTotal.findChild(QLabel, "StatValue").setText(f"{total:,}".replace(",", "."))
+        if hasattr(self, 'statInstalled'):
+            self.statInstalled.findChild(QLabel, "StatValue").setText(f"{installed:,}".replace(",", "."))
         self.statPlayed.findChild(QLabel, "StatValue").setText(str(played))
         self.statFinished.findChild(QLabel, "StatValue").setText(str(finished))
         self.statBacklog.findChild(QLabel, "StatValue").setText(f"{rate}%")
@@ -1622,6 +1730,7 @@ class GamingDashboard(QMainWindow):
             last_played = r[3] or "Nunca"
             finished = r[4] or 0
             favorite = r[5] or 0
+            installed = r[6] if len(r) >= 7 else 1
 
             display_title = formatDisplayName(game_name)
             platform = detectPlatform(game_name)
@@ -1631,6 +1740,13 @@ class GamingDashboard(QMainWindow):
             
             platItem = QTableWidgetItem(platform)
             platItem.setForeground(QColor(getPlatformColor(platform)))
+
+            installedItem = QTableWidgetItem("✔ Sim" if installed else "⏳ Não")
+            installedItem.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if installed:
+                installedItem.setForeground(QColor("#00b894"))
+            else:
+                installedItem.setForeground(QColor("#a29bfe"))
 
             timesItem = QTableWidgetItem(f"{times_played}x")
             timesItem.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1645,9 +1761,10 @@ class GamingDashboard(QMainWindow):
 
             self.table.setItem(row_idx, 0, titleItem)
             self.table.setItem(row_idx, 1, platItem)
-            self.table.setItem(row_idx, 2, timesItem)
-            self.table.setItem(row_idx, 3, lastItem)
-            self.table.setItem(row_idx, 4, statusItem)
+            self.table.setItem(row_idx, 2, installedItem)
+            self.table.setItem(row_idx, 3, timesItem)
+            self.table.setItem(row_idx, 4, lastItem)
+            self.table.setItem(row_idx, 5, statusItem)
 
     def onSearchChanged(self, text):
         self.refreshTable()
@@ -1655,11 +1772,36 @@ class GamingDashboard(QMainWindow):
     def onFilterChanged(self, idx):
         self.refreshTable()
 
+    def onTableSelectionChanged(self):
+        row = self.table.currentRow()
+        if row >= 0:
+            item = self.table.item(row, 0)
+            if item:
+                target = item.data(Qt.ItemDataRole.UserRole)
+                info = findGameInfo(target)
+                is_installed = (info[6] == 1) if (info and len(info) >= 7) else 1
+                if is_installed:
+                    self.btnPlaySelected.setText("▶ Jogar Selecionado")
+                else:
+                    self.btnPlaySelected.setText("📥 Instalar Selecionado")
+
     def onRerollHero(self):
         filter_mode = self.comboRerollFilter.currentText()
         filtered_content = self.content
 
-        if "Favoritos" in filter_mode:
+        if "Apenas Instalados" in filter_mode:
+            inst_rows = getGamesList(statusFilter="installed", limit=50000)
+            inst_names = {r[1] for r in inst_rows}
+            filtered_content = [g for g in self.content if g in inst_names]
+            if not filtered_content and inst_names:
+                filtered_content = list(inst_names)
+        elif "Apenas Não Instalados" in filter_mode:
+            uninst_rows = getGamesList(statusFilter="uninstalled", limit=50000)
+            uninst_names = {r[1] for r in uninst_rows}
+            filtered_content = [g for g in self.content if g in uninst_names]
+            if not filtered_content and uninst_names:
+                filtered_content = list(uninst_names)
+        elif "Favoritos" in filter_mode:
             fav_rows = getGamesList(statusFilter="favorite", limit=50000)
             fav_names = {r[1] for r in fav_rows}
             filtered_content = [g for g in self.content if g in fav_names]
@@ -1677,11 +1819,10 @@ class GamingDashboard(QMainWindow):
                 if g.startswith(PLAYNITE_PREFIX) or g.startswith("steam:") or g.startswith("gog:") or "steam" in g.lower() or "gog" in g.lower() or "epic" in g.lower()
             ]
             if not filtered_content:
-                # Fallback: tentar carregar jogos do Playnite sob demanda
                 try:
                     from aesgard.playnite import loadPlayniteGames, formatPlayniteEntries
                     pn_path = getattr(self.config, 'playnitePath', '')
-                    pn_games = loadPlayniteGames(pn_path, onlyInstalled=True)
+                    pn_games = loadPlayniteGames(pn_path, onlyInstalled=False)
                     if pn_games:
                         pn_entries = formatPlayniteEntries(pn_games)
                         for entry in pn_entries:
@@ -1722,11 +1863,12 @@ class GamingDashboard(QMainWindow):
         msgBox.setIcon(QMessageBox.Icon.Question)
         msgBox.setTextFormat(Qt.TextFormat.RichText)
         msgBox.setText(
-            "<b>Deseja iniciar a verificação de limpeza do banco de dados agora?</b><br><br>"
-            "Esta rotina irá verificar se os jogos cadastrados no banco ainda existem no seu computador.<br><br>"
-            "• Jogos desinstalados serão <b>removidos do banco de dados</b>.<br>"
-            "• <font color='#00cec9'><b>Nenhum arquivo ou pasta será apagado do disco</b></font>.<br>"
-            "• Pastas que não possuem o executável mas contêm arquivos residuais serão listadas no relatório final."
+            "<b>Deseja iniciar a verificação de integridade do banco de dados agora?</b><br><br>"
+            "Esta rotina irá verificar quais jogos cadastrados no banco estão instalados atualmente no seu computador.<br><br>"
+            "• Jogos que não forem encontrados serão marcados como <b>NÃO INSTALADOS</b>.<br>"
+            "• <font color='#00cec9'><b>Nenhum registro é deletado: contadores de jogatinas, datas e favoritos continuam preservados com segurança!</b></font><br>"
+            "• <font color='#00cec9'><b>Nenhum arquivo do seu computador será apagado</b></font>.<br>"
+            "• Pastas residuais serão listadas no relatório final."
         )
         msgBox.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         msgBox.setDefaultButton(QMessageBox.StandardButton.No)
@@ -1750,7 +1892,7 @@ class GamingDashboard(QMainWindow):
             return isGameInstalledOnSystem(game_name, self.config, playniteInstalledIds=playnite_ids)
 
         progress = QProgressDialog("Iniciando verificação do banco de dados...", "Cancelar", 0, 100, self)
-        progress.setWindowTitle("Limpando Banco de Dados")
+        progress.setWindowTitle("Verificando Instalações")
         progress.setWindowModality(Qt.WindowModality.WindowModal)
         progress.setMinimumDuration(0)
         progress.setValue(0)
@@ -1769,6 +1911,7 @@ class GamingDashboard(QMainWindow):
             progress.setValue(100)
             self.refreshStats()
             self.refreshTable()
+            self.updateHeroDisplay(self.currentChoice)
         except Exception as e:
             logger.error(f"Erro durante limpeza: {e}")
             result = {"total_checked": 0, "removed_count": 0, "warnings_not_empty": [str(e)]}
@@ -1776,12 +1919,13 @@ class GamingDashboard(QMainWindow):
             progress.close()
 
         resBox = QMessageBox(self)
-        resBox.setWindowTitle("Relatório de Limpeza")
+        resBox.setWindowTitle("Relatório de Verificação")
         resBox.setTextFormat(Qt.TextFormat.RichText)
         msg = (
-            f"<b>Limpeza concluída com sucesso!</b><br><br>"
+            f"<b>Verificação concluída com sucesso!</b><br><br>"
             f"• Jogos verificados: <b>{result['total_checked']:,}</b><br>".replace(",", ".") +
-            f"• Jogos desinstalados removidos do banco: <font color='#00cec9'><b>{result['removed_count']:,}</b></font><br>".replace(",", ".")
+            f"• Jogos atualizados para NÃO INSTALADOS: <font color='#fdcb6e'><b>{result['removed_count']:,}</b></font><br>".replace(",", ".") +
+            f"<i>(Seus históricos de jogo e favoritos foram mantidos intactos)</i><br>"
         )
 
         if result["warnings_not_empty"]:
@@ -1797,11 +1941,65 @@ class GamingDashboard(QMainWindow):
         resBox.setIcon(QMessageBox.Icon.Information)
         resBox.exec()
 
+    def onSyncSources(self):
+        progress = QProgressDialog("Escaneando todas as fontes de jogos...", None, 0, 0, self)
+        progress.setWindowTitle("Sincronizando Fontes")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.show()
+        QApplication.processEvents()
+
+        try:
+            scanned = scanAllSources(self.config, includeUninstalled=True)
+            stats_import = importContentToDatabase(scanned)
+            self.content = [entry for entry, _ in scanned]
+            self.refreshStats()
+            self.refreshTable()
+            self.updateHeroDisplay(self.currentChoice)
+
+            installed_total = sum(1 for _, inst in scanned if inst == 1)
+            uninstalled_total = sum(1 for _, inst in scanned if inst == 0)
+
+            QMessageBox.information(
+                self,
+                "Sincronização Concluída",
+                f"<b>Catálogo de jogos sincronizado com sucesso!</b><br><br>"
+                f"• Total de jogos identificados: <b>{len(scanned):,}</b><br>"
+                f"• Jogos instalados: <font color='#00cec9'><b>{installed_total:,}</b></font><br>"
+                f"• Jogos não instalados: <font color='#a29bfe'><b>{uninstalled_total:,}</b></font><br><br>"
+                f"<i>O banco de dados foi atualizado. Jogos instalados podem ser jogados imediatamente e jogos não instalados possuem botão de instalação.</i>".replace(",", ".")
+            )
+        except Exception as e:
+            logger.error(f"Erro ao sincronizar fontes: {e}", exc_info=True)
+            QMessageBox.critical(self, "Erro de Sincronização", f"Ocorreu um erro ao sincronizar as fontes:\n{e}")
+        finally:
+            progress.close()
+
     def onPlayHero(self):
         target = self.currentChoice
-        logger.info(f"Launching game from Hero Card: {target}")
-        self.showMinimized()
-        executeGame(target, self.steamOwnedGames)
+        info = findGameInfo(target)
+        is_installed = (info[6] == 1) if (info and len(info) >= 7) else 1
+
+        if is_installed:
+            logger.info(f"Launching game from Hero Card: {target}")
+            self.showMinimized()
+            executeGame(target, self.steamOwnedGames)
+        else:
+            logger.info(f"Installing uninstalled game from Hero Card: {target}")
+            success = installGame(target)
+            if success:
+                QMessageBox.information(
+                    self,
+                    "Instalação Acionada",
+                    f"A instalação/preparação do jogo foi acionada:<br><br><b>{formatDisplayName(target)}</b>"
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Instalação",
+                    f"Não foi possível disparar o instalador automaticamente para:<br><br><b>{formatDisplayName(target)}</b><br><br>"
+                    f"Verifique se o cliente correspondente (Playnite/Steam/eXoDOS) está instalado e configurado."
+                )
+
         self.refreshStats()
         self.refreshTable()
         self.updateHeroDisplay(self.currentChoice)
@@ -1812,9 +2010,29 @@ class GamingDashboard(QMainWindow):
             item = self.table.item(row, 0)
             if item:
                 target = item.data(Qt.ItemDataRole.UserRole)
-                logger.info(f"Launching game from Database Table: {target}")
-                self.showMinimized()
-                executeGame(target, self.steamOwnedGames)
+                info = findGameInfo(target)
+                is_installed = (info[6] == 1) if (info and len(info) >= 7) else 1
+
+                if is_installed:
+                    logger.info(f"Launching game from Database Table: {target}")
+                    self.showMinimized()
+                    executeGame(target, self.steamOwnedGames)
+                else:
+                    logger.info(f"Installing uninstalled game from Database Table: {target}")
+                    success = installGame(target)
+                    if success:
+                        QMessageBox.information(
+                            self,
+                            "Instalação Acionada",
+                            f"A instalação/preparação do jogo foi acionada:<br><br><b>{formatDisplayName(target)}</b>"
+                        )
+                    else:
+                        QMessageBox.warning(
+                            self,
+                            "Instalação",
+                            f"Não foi possível disparar o instalador automaticamente para:<br><br><b>{formatDisplayName(target)}</b>"
+                        )
+
                 self.refreshStats()
                 self.refreshTable()
                 self.updateHeroDisplay(target)

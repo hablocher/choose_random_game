@@ -110,13 +110,18 @@ def loadPlayniteGames(playnitePath, onlyInstalled=True, exportJsonPath=None):
 
     return games
 
-def formatPlayniteEntries(games):
-    """Formats Playnite games into choose_random_game string entries."""
+loadPlayniteLibrary = loadPlayniteGames
+
+def formatPlayniteEntries(games, includeInstalledFlag=False):
+    """Formats Playnite games into choose_random_game string entries or (entry, is_installed) tuples."""
     entries = []
     for g in games:
         # Format: playnite:Game Name:GameId
         entry = f"{PLAYNITE_PREFIX}{g['name']}:{g['id']}"
-        entries.append(entry)
+        if includeInstalledFlag:
+            entries.append((entry, 1 if g.get("is_installed") else 0))
+        else:
+            entries.append(entry)
     return entries
 
 def launchPlayniteGame(gameId, uriPrefix="playnite://playnite/start/"):
@@ -133,6 +138,23 @@ def launchPlayniteGame(gameId, uriPrefix="playnite://playnite/start/"):
             return True
         except Exception as we:
             logger.error(f"Fallback launch failed: {we}")
+            return False
+
+def installPlayniteGame(gameId: str) -> bool:
+    """Prompts Playnite to install the game via playnite://playnite/install/<id>."""
+    uri = f"playnite://playnite/install/{gameId}"
+    logger.info(f"Triggering Playnite install for ID {gameId} via {uri}")
+    try:
+        os.startfile(uri)
+        return True
+    except Exception as e:
+        logger.error(f"Error triggering Playnite install: {e}")
+        try:
+            import webbrowser
+            webbrowser.open(uri)
+            return True
+        except Exception as we:
+            logger.error(f"Fallback install launch failed: {we}")
             return False
 
 def getPlayniteCoverPath(playnitePath, coverImageOrGameId, libraryFilesDir="library/files"):

@@ -65,7 +65,8 @@ def opencon():
                     timesPlayed INTEGER DEFAULT 0,
                     lastTimePlayed DATETIME,
                     finished INTEGER DEFAULT 0,
-                    favorite INTEGER DEFAULT 0
+                    favorite INTEGER DEFAULT 0,
+                    installed INTEGER DEFAULT 1
                 );
             """)
             conn.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_gameName ON {TABLE_NAME}(LOWER(gameName));")
@@ -75,13 +76,21 @@ def opencon():
 
 def ensureDatabaseIntegrity(conn):
     """
-    Consolidates any historical duplicates in the database and ensures 
-    a UNIQUE index on gameName so that duplicates can never occur again.
+    Consolidates historical duplicates, verifies columns (like 'installed'),
+    and ensures a UNIQUE index on gameName.
     """
     if DBTYPE != "sqlite":
         return
     try:
         cursor = conn.cursor()
+        # 0. Check and migrate 'installed' column if absent
+        cursor.execute(f"PRAGMA table_info({TABLE_NAME});")
+        columns = [col[1] for col in cursor.fetchall()]
+        if "installed" not in columns:
+            logger.info(f"Migrating {TABLE_NAME}: adding 'installed' column...")
+            cursor.execute(f"ALTER TABLE {TABLE_NAME} ADD COLUMN installed INTEGER DEFAULT 1;")
+            conn.commit()
+
         # 1. Check if duplicate records exist
         cursor.execute(f"""
             SELECT COUNT(*) 
@@ -102,13 +111,15 @@ def ensureDatabaseIntegrity(conn):
                 SET timesPlayed = sub.max_played,
                     lastTimePlayed = sub.max_last,
                     favorite = sub.max_fav,
-                    finished = sub.max_fin
+                    finished = sub.max_fin,
+                    installed = sub.max_inst
                 FROM (
                     SELECT LOWER(gameName) as l_name,
                            MAX(timesPlayed) as max_played,
                            MAX(lastTimePlayed) as max_last,
                            MAX(favorite) as max_fav,
-                           MAX(finished) as max_fin
+                           MAX(finished) as max_fin,
+                           MAX(installed) as max_inst
                     FROM {TABLE_NAME}
                     GROUP BY LOWER(gameName)
                 ) sub
@@ -150,10 +161,11 @@ def _get_placeholder():
 def findGameInfo(choosedGame):
     """
     Finds a game row in the database.
-    Returns the row dictionary/tuple or None.
+    Returns the row dictionary/tuple or None:
+    (id, gameName, timesPlayed, lastTimePlayed, finished, favorite, installed)
     """
     ph = _get_placeholder()
-    sql = f"SELECT id, gameName, timesPlayed, lastTimePlayed, finished, favorite FROM {TABLE_NAME} WHERE gameName = {ph}"
+    sql = f"SELECT id, gameName, timesPlayed, lastTimePlayed, finished, favorite, installed FROM {TABLE_NAME} WHERE gameName = {ph}"
     conn = None
     try:
         conn = opencon()
@@ -171,7 +183,7 @@ def findGameInfo(choosedGame):
 
 def insertGameInfo(choosedGame):
     """
-    Inserts or updates play count and last played timestamp for the chosen game.
+    Inserts or updates play count, last played timestamp, and installed status for the chosen game.
     """
     ph = _get_placeholder()
     conn = None
@@ -183,13 +195,13 @@ def insertGameInfo(choosedGame):
         row = findGameInfo(choosedGame)
         if row is None:
             if DBTYPE == "sqlite":
-                insert_sql = f"INSERT OR IGNORE INTO {TABLE_NAME} (gameName, timesPlayed, finished, lastTimePlayed, favorite) VALUES (?, 1, 0, CURRENT_TIMESTAMP, 0)"
+                insert_sql = f"INSERT OR IGNORE INTO {TABLE_NAME} (gameName, timesPlayed, finished, lastTimePlayed, favorite, installed) VALUES (?, 1, 0, CURRENT_TIMESTAMP, 0, 1)"
                 cursor.execute(insert_sql, (choosedGame,))
             else:
-                insert_sql = f"INSERT INTO {TABLE_NAME} (gameName, timesPlayed, finished, lastTimePlayed, favorite) VALUES ({ph}, 1, 0, CURRENT_TIMESTAMP, 0)"
+                insert_sql = f"INSERT INTO {TABLE_NAME} (gameName, timesPlayed, finished, lastTimePlayed, favorite, installed) VALUES ({ph}, 1, 0, CURRENT_TIMESTAMP, 0, 1)"
                 cursor.execute(insert_sql, (choosedGame,))
         else:
-            update_sql = f"UPDATE {TABLE_NAME} SET timesPlayed = timesPlayed + 1, lastTimePlayed = CURRENT_TIMESTAMP WHERE gameName = {ph}"
+            update_sql = f"UPDATE {TABLE_NAME} SET timesPlayed = timesPlayed + 1, lastTimePlayed = CURRENT_TIMESTAMP, installed = 1 WHERE gameName = {ph}"
             cursor.execute(update_sql, (choosedGame,))
             
         if hasattr(conn, 'commit'):
@@ -211,7 +223,7 @@ def setFinished(choosedGame, finished=1):
         cursor = conn.cursor()
         cursor.execute(sql, (finished, choosedGame))
         if cursor.rowcount == 0:
-            insert_sql = f"INSERT INTO {TABLE_NAME} (gameName, timesPlayed, finished, lastTimePlayed, favorite) VALUES ({ph}, 0, {ph}, NULL, 0)"
+            insert_sql = f"INSERT INTO {TABLE_NAME} (gameName, timesPlayed, finished, lastTimePlayed, favorite, installed) VALUES ({ph}, 0, {ph}, NULL, 0, 1)"
             cursor.execute(insert_sql, (choosedGame, finished))
         if hasattr(conn, 'commit'):
             conn.commit()
@@ -233,7 +245,7 @@ def setFavorite(choosedGame, favorite=1):
         cursor = conn.cursor()
         cursor.execute(sql, (favorite, choosedGame))
         if cursor.rowcount == 0:
-            insert_sql = f"INSERT INTO {TABLE_NAME} (gameName, timesPlayed, finished, lastTimePlayed, favorite) VALUES ({ph}, 0, 0, NULL, {ph})"
+            insert_sql = f"INSERT INTO {TABLE_NAME} (gameName, timesPlayed, finished, lastTimePlayed, favorite, installed) VALUES ({ph}, 0, 0, NULL, {ph}, 1)"
             cursor.execute(insert_sql, (choosedGame, favorite))
         if hasattr(conn, 'commit'):
             conn.commit()
@@ -245,9 +257,12 @@ def setFavorite(choosedGame, favorite=1):
         if conn:
             conn.close()
 
-def importContentToDatabase(content):
+def importContentToDatabase(content, defaultInstalled=1):
     """
-    Efficiently batch-imports a list of games into the database.
+    Efficiently batch-imports/updates games in the database.
+    Items in content can be either:
+      - a string: "gameName" (installed status defaults to defaultInstalled)
+      - a tuple/list: ("gameName", is_installed)
     """
     if not content:
         return
@@ -258,21 +273,34 @@ def importContentToDatabase(content):
         conn = opencon()
         cursor = conn.cursor()
         
+        # Normalize items to (name, is_installed)
+        normalized = []
+        for item in content:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                normalized.append((str(item[0]), 1 if item[1] else 0))
+            else:
+                normalized.append((str(item), 1 if defaultInstalled else 0))
+
         if DBTYPE == "sqlite":
-            sql = f"INSERT OR IGNORE INTO {TABLE_NAME} (gameName, timesPlayed, finished, lastTimePlayed, favorite) VALUES (?, 0, 0, NULL, 0)"
-            cursor.executemany(sql, [(g,) for g in content])
+            sql_insert = f"INSERT OR IGNORE INTO {TABLE_NAME} (gameName, timesPlayed, finished, lastTimePlayed, favorite, installed) VALUES (?, 0, 0, NULL, 0, ?)"
+            cursor.executemany(sql_insert, normalized)
+            sql_update = f"UPDATE {TABLE_NAME} SET installed = ? WHERE gameName = ?"
+            cursor.executemany(sql_update, [(inst, name) for name, inst in normalized])
         else:
-            for game in content:
+            for name, inst in normalized:
                 check_sql = f"SELECT id FROM {TABLE_NAME} WHERE gameName = {ph}"
-                cursor.execute(check_sql, (game,))
+                cursor.execute(check_sql, (name,))
                 if cursor.fetchone() is None:
-                    ins_sql = f"INSERT INTO {TABLE_NAME} (gameName, timesPlayed, finished, lastTimePlayed, favorite) VALUES ({ph}, 0, 0, NULL, 0)"
-                    cursor.execute(ins_sql, (game,))
+                    ins_sql = f"INSERT INTO {TABLE_NAME} (gameName, timesPlayed, finished, lastTimePlayed, favorite, installed) VALUES ({ph}, 0, 0, NULL, 0, {ph})"
+                    cursor.execute(ins_sql, (name, inst))
+                else:
+                    upd_sql = f"UPDATE {TABLE_NAME} SET installed = {ph} WHERE gameName = {ph}"
+                    cursor.execute(upd_sql, (inst, name))
                     
         if hasattr(conn, 'commit'):
             conn.commit()
         cursor.close()
-        logger.info(f"Batch imported {len(content)} games into database.")
+        logger.info(f"Batch imported/updated {len(content)} games into database.")
     except Exception as e:
         if conn and hasattr(conn, 'rollback'):
             conn.rollback()
@@ -284,7 +312,8 @@ def importContentToDatabase(content):
 def getDatabaseStats():
     """
     Returns aggregated statistics from database:
-    total_games, total_played, finished_count, favorite_count, unplayed_count
+    total_games, total_played, finished_count, favorite_count, unplayed_count,
+    installed_count, uninstalled_count, completion_rate
     """
     stats = {
         "total_games": 0,
@@ -292,6 +321,8 @@ def getDatabaseStats():
         "finished_count": 0,
         "favorite_count": 0,
         "unplayed_count": 0,
+        "installed_count": 0,
+        "uninstalled_count": 0,
         "completion_rate": 0.0
     }
     conn = None
@@ -320,6 +351,16 @@ def getDatabaseStats():
         if row:
             stats["unplayed_count"] = row[0] or 0
 
+        cursor.execute(f"SELECT COUNT(*) FROM {TABLE_NAME} WHERE installed = 1")
+        row = cursor.fetchone()
+        if row:
+            stats["installed_count"] = row[0] or 0
+
+        cursor.execute(f"SELECT COUNT(*) FROM {TABLE_NAME} WHERE installed = 0")
+        row = cursor.fetchone()
+        if row:
+            stats["uninstalled_count"] = row[0] or 0
+
         if stats["total_games"] > 0:
             stats["completion_rate"] = round((stats["finished_count"] / stats["total_games"]) * 100, 1)
 
@@ -334,7 +375,7 @@ def getDatabaseStats():
 def getGamesList(searchQuery="", statusFilter="all", limit=1000, offset=0, filterText=None):
     """
     Retrieves filtered games from database.
-    statusFilter: 'all', 'unplayed', 'played', 'finished', 'favorite'
+    statusFilter: 'all', 'installed', 'uninstalled', 'unplayed', 'played', 'finished', 'favorite'
     """
     if filterText is not None:
         searchQuery = filterText
@@ -348,7 +389,11 @@ def getGamesList(searchQuery="", statusFilter="all", limit=1000, offset=0, filte
 
     # Normalize statusFilter to handle both internal keys and UI strings (English/Portuguese)
     sf = (statusFilter or "all").strip().lower()
-    if sf in ("unplayed", "não jogados", "nao jogados", "nao_jogados"):
+    if sf in ("installed", "instalados", "instalado", "apenas instalados"):
+        conditions.append("installed = 1")
+    elif sf in ("uninstalled", "não instalados", "nao instalados", "desinstalados", "não instalado"):
+        conditions.append("installed = 0")
+    elif sf in ("unplayed", "não jogados", "nao jogados", "nao_jogados"):
         conditions.append("timesPlayed = 0")
     elif sf in ("played", "jogados"):
         conditions.append("timesPlayed > 0")
@@ -362,7 +407,7 @@ def getGamesList(searchQuery="", statusFilter="all", limit=1000, offset=0, filte
         where_clause = " WHERE " + " AND ".join(conditions)
 
     sql = f"""
-        SELECT id, gameName, timesPlayed, lastTimePlayed, finished, favorite
+        SELECT id, gameName, timesPlayed, lastTimePlayed, finished, favorite, installed
         FROM {TABLE_NAME}
         {where_clause}
         ORDER BY favorite DESC, timesPlayed ASC, gameName ASC
@@ -386,13 +431,15 @@ def getGamesList(searchQuery="", statusFilter="all", limit=1000, offset=0, filte
 
 def cleanOrphanGames(con, config, check_installed_func=None, progress_callback=None):
     """
-    Cleans up orphan game records from the database table.
+    Marks games that are no longer installed/present as installed = 0 (NON-DESTRUCTIVE CLEANUP).
+    Does NOT delete database records, preserving play counts, last played timestamps, and favorites.
     Calls check_installed_func(game_name) -> (is_installed, folder_not_empty, warning_message)
     Returns:
-        dict with keys: 'total_checked', 'removed_count', 'warnings_not_empty'
+        dict with keys: 'total_checked', 'uninstalled_count', 'warnings_not_empty'
     """
     summary = {
         "total_checked": 0,
+        "uninstalled_count": 0,
         "removed_count": 0,
         "warnings_not_empty": []
     }
@@ -407,13 +454,13 @@ def cleanOrphanGames(con, config, check_installed_func=None, progress_callback=N
         total_rows = len(rows)
         summary["total_checked"] = total_rows
 
-        ids_to_remove = []
+        ids_to_mark_uninstalled = []
         for idx, row in enumerate(rows):
             record_id, game_name = row[0], row[1]
             try:
                 is_installed, folder_not_empty, warning_msg = check_installed_func(game_name)
                 if not is_installed:
-                    ids_to_remove.append(record_id)
+                    ids_to_mark_uninstalled.append(record_id)
                     if folder_not_empty and warning_msg:
                         summary["warnings_not_empty"].append(warning_msg)
             except Exception as ex:
@@ -422,26 +469,27 @@ def cleanOrphanGames(con, config, check_installed_func=None, progress_callback=N
             if progress_callback and (idx % 200 == 0 or idx == total_rows - 1):
                 progress_callback(idx + 1, total_rows)
 
-        # Delete orphan records in batches
-        if ids_to_remove:
+        # Mark uninstalled records in batches (UPDATE instead of DELETE!)
+        if ids_to_mark_uninstalled:
             ph = _get_placeholder()
             batch_size = 500
-            for i in range(0, len(ids_to_remove), batch_size):
-                batch = ids_to_remove[i:i + batch_size]
+            for i in range(0, len(ids_to_mark_uninstalled), batch_size):
+                batch = ids_to_mark_uninstalled[i:i + batch_size]
                 placeholders = ",".join([ph] * len(batch))
-                del_sql = f"DELETE FROM {TABLE_NAME} WHERE id IN ({placeholders})"
-                cursor.execute(del_sql, tuple(batch))
+                upd_sql = f"UPDATE {TABLE_NAME} SET installed = 0 WHERE id IN ({placeholders})"
+                cursor.execute(upd_sql, tuple(batch))
             
             if hasattr(conn, 'commit'):
                 conn.commit()
 
-        summary["removed_count"] = len(ids_to_remove)
+        summary["uninstalled_count"] = len(ids_to_mark_uninstalled)
+        summary["removed_count"] = len(ids_to_mark_uninstalled)  # For backwards compatibility with callers
         cursor.close()
-        logger.info(f"Cleaned {summary['removed_count']} orphan games from database.")
+        logger.info(f"Marked {summary['uninstalled_count']} uninstalled games in database (records preserved).")
     except Exception as e:
         if conn and hasattr(conn, 'rollback'):
             conn.rollback()
-        logger.error(f"Error cleaning orphan games from database: {e}")
+        logger.error(f"Error marking uninstalled games in database: {e}")
     finally:
         if should_close and conn:
             conn.close()

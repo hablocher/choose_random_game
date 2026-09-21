@@ -232,16 +232,28 @@ import datetime
 
 def getGameOfTheDay(content, seed_date=True):
     """
-    Selects a Game of the Day strictly from the verified installed content list.
+    Selects a Game of the Day, prioritizing installed games if available in the database.
     When seed_date is True, the selection remains consistent for the entire calendar day.
     """
     if not content:
         return ""
+    
+    # Prioritize installed games if known
+    installed_candidates = []
+    for g in content:
+        info = findGameInfo(g)
+        if info and len(info) >= 7:
+            if info[6] == 1:
+                installed_candidates.append(g)
+        else:
+            installed_candidates.append(g)
+            
+    pool = installed_candidates if installed_candidates else content
     if seed_date:
         today_str = datetime.date.today().isoformat()
-        idx = abs(hash(today_str)) % len(content)
-        return content[idx]
-    return random.choice(content)
+        idx = abs(hash(today_str)) % len(pool)
+        return pool[idx]
+    return random.choice(pool)
 
 def extractWin32GameIcon(choosedGame, targetSize=(160, 160)):
     """Extracts Windows icon from shortcut (.lnk) or executable (.exe) as fallback."""
@@ -521,6 +533,177 @@ def executeGame(choosedGame, steamOwnedGames=None):
         return False
         
     return False
+
+def installGame(choosedGame):
+    """
+    Triggers installation or download for an uninstalled game based on source:
+    - Playnite: via playnite://playnite/install/<id>
+    - Steam: via steam://install/<app_id>
+    - eXoDOS: executes install.bat or setup
+    - Local / Shortcut: opens target folder in Explorer
+    """
+    try:
+        # 1. Playnite Game
+        if choosedGame.startswith(PLAYNITE_PREFIX):
+            parts = choosedGame.split(":")
+            game_id = parts[-1]
+            from aesgard.playnite import installPlayniteGame
+            return installPlayniteGame(game_id)
+
+        # 2. Direct Steam AppID
+        if choosedGame.startswith("steam:"):
+            app_id = choosedGame.split(":")[-1]
+            os.startfile(f"steam://install/{app_id}")
+            return True
+
+        # 3. eXoDOS Game
+        if choosedGame.startswith(exodosPrefix) or "exodos" in choosedGame.lower():
+            target_dir = choosedGame[len(exodosPrefix):] if choosedGame.startswith(exodosPrefix) else choosedGame
+            folder_name = os.path.basename(target_dir.rstrip("/\\"))
+            metadataFolder = getattr(__CONFIG__, 'EXODOSMetadataFolder', '!dos')
+            dos_bat_dir = os.path.join(getattr(__CONFIG__, 'EXODOSLocation', '') or '', metadataFolder, folder_name)
+            for c in [target_dir, dos_bat_dir]:
+                if os.path.isdir(c):
+                    install_bat = os.path.join(c, "install.bat")
+                    if os.path.exists(install_bat):
+                        os.chdir(c)
+                        os.startfile(install_bat)
+                        return True
+                    for f in os.listdir(c):
+                        if f.lower().endswith('.bat') and 'install' in f.lower():
+                            os.chdir(c)
+                            os.startfile(os.path.join(c, f))
+                            return True
+
+        # 4. Local folder or shortcut fallback: open in Explorer
+        clean_path = choosedGame
+        if clean_path.startswith(linkPrefix):
+            clean_path = clean_path[len(linkPrefix):]
+        if os.path.exists(clean_path):
+            os.startfile(clean_path if os.path.isdir(clean_path) else os.path.dirname(clean_path))
+            return True
+
+    except Exception as e:
+        logger.error(f"Failed to install '{choosedGame}': {e}")
+        return False
+
+    return False
+
+def scanAllSources(config=None, includeUninstalled=True):
+    """
+    Scans all configured sources and returns a deduplicated list of (gameEntry, is_installed) tuples.
+    Includes Playnite (installed and uninstalled), local folders, shortcuts, and eXoDOS.
+    """
+    cfg = config or __CONFIG__
+    results = []
+
+    # 1. Playnite Catalog
+    if getattr(cfg, 'enablePlaynite', True):
+        try:
+            from aesgard.playnite import loadPlayniteGames, formatPlayniteEntries
+            playnite_path = getattr(cfg, 'playnitePath', None) or getattr(cfg, 'playniteDatabasePath', None)
+            playnite_games = loadPlayniteGames(
+                playnite_path,
+                onlyInstalled=(not includeUninstalled),
+                exportJsonPath=getattr(cfg, 'playniteExportJson', None)
+            )
+            entries_with_status = formatPlayniteEntries(playnite_games, includeInstalledFlag=True)
+            results.extend(entries_with_status)
+        except Exception as e:
+            logger.warning(f"Error scanning Playnite games in scanAllSources: {e}")
+
+    # 2. Local game folders
+    ends = tuple(t[1].lower() for t in getattr(cfg, 'endswith', [])) if getattr(cfg, 'endswith', None) else ()
+    exodosLocation = getattr(cfg, 'EXODOSLocation', None)
+    
+    local_candidates = []
+    gameFolders = getattr(cfg, 'gameFolders', [])
+    gameCommonFolders = getattr(cfg, 'gameCommonFolders', [])
+    
+    for key, gameFolder in gameFolders:
+        if exodosLocation and os.path.abspath(str(gameFolder)) == os.path.abspath(str(exodosLocation)):
+            continue
+        if gameCommonFolders:
+            for key_c, common in gameCommonFolders:
+                folder = os.path.join(str(gameFolder), str(common).strip("/\\"))
+                if os.path.isdir(folder):
+                    try:
+                        for game in next(os.walk(folder))[1]:
+                            g = os.path.join(folder, game).lower().replace("\\", "/")
+                            if not g.endswith(ends):
+                                local_candidates.append(g)
+                    except StopIteration:
+                        pass
+        else:
+            if os.path.isdir(gameFolder):
+                try:
+                    for game in next(os.walk(gameFolder))[1]:
+                        g = os.path.join(gameFolder, game).lower().replace("\\", "/")
+                        if not g.endswith(ends):
+                            local_candidates.append(g)
+                except StopIteration:
+                    pass
+
+    removals = getattr(cfg, 'removals', [])
+    for cand in set(local_candidates):
+        clean_g = cand
+        for key, removal in removals:
+            clean_g = clean_g.replace(removal, '')
+        if clean_g:
+            is_inst, _, _ = isGameInstalledOnSystem(clean_g, cfg)
+            results.append((clean_g, 1 if is_inst else 0))
+
+    # 3. Shortcuts / Desktop
+    linksList = preparelinksList(
+        getattr(cfg, 'foldersWithLinks', []),
+        getattr(cfg, 'baseLinks', None),
+        includeDesktop=getattr(cfg, 'includeDesktop', True),
+        desktopPath=getattr(cfg, 'desktopPath', None)
+    )
+    for link in set(linksList):
+        clean_link = link
+        for key, removal in removals:
+            clean_link = clean_link.replace(removal, '')
+        if clean_link:
+            is_inst, _, _ = isGameInstalledOnSystem(clean_link, cfg)
+            results.append((clean_link, 1 if is_inst else 0))
+
+    # 4. eXoDOS Games
+    if exodosLocation and os.path.isdir(exodosLocation):
+        metadataFolder = getattr(cfg, 'EXODOSMetadataFolder', '!dos').lstrip('/\\')
+        try:
+            subdirs = next(os.walk(exodosLocation))[1]
+            installed_exodos = set()
+            for folder in subdirs:
+                if folder.startswith("!") or folder.lower() == metadataFolder.lower():
+                    continue
+                full_p = os.path.join(exodosLocation, folder).replace("\\", "/")
+                entry = f"{exodosPrefix}{full_p}"
+                installed_exodos.add(folder.lower())
+                results.append((entry, 1))
+
+            if includeUninstalled:
+                dos_dir = os.path.join(exodosLocation, metadataFolder)
+                if os.path.isdir(dos_dir):
+                    meta_subdirs = next(os.walk(dos_dir))[1]
+                    for folder in meta_subdirs:
+                        if folder.startswith("!"):
+                            continue
+                        if folder.lower() not in installed_exodos:
+                            full_p = os.path.join(dos_dir, folder).replace("\\", "/")
+                            entry = f"{exodosPrefix}{full_p}"
+                            results.append((entry, 0))
+        except Exception as e:
+            logger.warning(f"Error scanning eXoDOS catalog in scanAllSources: {e}")
+
+    # Deduplicate results: if entry appears multiple times, prefer is_installed == 1
+    dedup = {}
+    for entry, is_inst in results:
+        if entry not in dedup or (is_inst == 1 and dedup[entry] == 0):
+            dedup[entry] = is_inst
+
+    return [(k, v) for k, v in dedup.items()]
+
 
 def chooseGame(content, sampleSize=None):
     """
