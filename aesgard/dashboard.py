@@ -23,8 +23,8 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem, QHeaderView, QFrame, QSplitter, QMessageBox,
     QStackedWidget, QButtonGroup, QProgressDialog, QCheckBox, QGridLayout
 )
-from PyQt6.QtCore import Qt, QSize, QTimer
-from PyQt6.QtGui import QFont, QPixmap, QImage, QColor, QIcon
+from PyQt6.QtCore import Qt, QSize, QTimer, QRectF
+from PyQt6.QtGui import QFont, QPixmap, QImage, QColor, QIcon, QPainter, QPen, QBrush
 
 from aesgard.gameutil import (
     executeGame, installGame, scanAllSources, findGameIcon, chooseGame,
@@ -39,6 +39,15 @@ from aesgard.database import (
 from aesgard.ui import formatDisplayName, detectPlatform, getPlatformColor, clearPlayniteMetaCache
 from aesgard.intel_dialog import GameIntelDialog
 from aesgard.streamer import LiveHistoryManager, StreamerOverlayWindow
+from aesgard.hltb import get_cached_hltb, fetch_hltb_data, format_hltb_duration, get_duration_badge_style
+from aesgard.web_overlay import (
+    start_overlay_server, update_overlay_game, update_overlay_timer, 
+    update_overlay_channel, update_overlay_poll, record_poll_vote
+)
+from aesgard.wheel_dialog import WheelOfFortuneDialog
+from aesgard.card_generator import generate_live_card
+import subprocess
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -333,6 +342,28 @@ class GamingDashboard(QMainWindow):
         self.overlayWindow = None
         self._rouletteTimer = None
         self.chatChoiceTrio = []
+        self.chatVotes = [0, 0, 0]
+
+        # New Features State: Web Overlay, Session Timer, Mystery Mode
+        self.sessionStartTime = None
+        self.activePlayingGame = None
+        self.sessionTimer = QTimer(self)
+        self.sessionTimer.setInterval(1000)
+        self.sessionTimer.timeout.connect(self._onSessionTimerTick)
+
+        self.isMysteryMode = False
+        self.mysteryRevealed = False
+
+        # Start Web Overlay Server (port 8089)
+        try:
+            self.overlayServerStarted = start_overlay_server(port=8089)
+            liveChannelUrl = getattr(self.config, 'streamerYouTubeLiveChannel', '').strip()
+            mainChannelUrl = getattr(self.config, 'streamerYouTubeMainChannel', '').strip()
+            handle = extractChannelHandle(liveChannelUrl or mainChannelUrl, "@Hablocher")
+            update_overlay_channel(handle)
+        except Exception as e:
+            logger.warning(f"Não foi possível iniciar servidor de overlay web: {e}")
+            self.overlayServerStarted = False
 
         self.setWindowTitle("Choose Random Game - Gaming Dashboard & Live Stream Assistant")
         w = getattr(self.config, 'uiWindowWidth', 1280)
@@ -355,6 +386,9 @@ class GamingDashboard(QMainWindow):
 
         # 2. Navigation Bar (Tabs: Sorteador Geral, Jogo do Dia, GOTY, Escolha do Chat, Histórico de Lives)
         self.buildNavBar()
+
+        # 2.5 Live Gameplay Session Stopwatch Bar
+        self.buildSessionBar()
 
         # 3. Stacked Container for Views
         self.stack = QStackedWidget()
@@ -439,6 +473,22 @@ class GamingDashboard(QMainWindow):
         self.btnCleanDb.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnCleanDb.clicked.connect(self.onCleanDatabase)
         headerLayout.addWidget(self.btnCleanDb)
+
+        # 1-Click Playnite Exporter
+        self.btnExportPlaynite = QPushButton("⚡ Exportar Playnite")
+        self.btnExportPlaynite.setObjectName("BtnSecondary")
+        self.btnExportPlaynite.setToolTip("Dispara o script do Playnite para re-exportar a biblioteca completa (jogos de PC e emuladores)")
+        self.btnExportPlaynite.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnExportPlaynite.clicked.connect(self.onExportPlaynite)
+        headerLayout.addWidget(self.btnExportPlaynite)
+
+        # Web Overlay for OBS
+        self.btnWebOverlay = QPushButton("📡 Overlay OBS")
+        self.btnWebOverlay.setObjectName("BtnSecondary")
+        self.btnWebOverlay.setToolTip("Abre o Overlay HTML5 para OBS Studio no navegador (http://localhost:8089/overlay)")
+        self.btnWebOverlay.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnWebOverlay.clicked.connect(self.onOpenWebOverlay)
+        headerLayout.addWidget(self.btnWebOverlay)
 
         # YouTube Channels (Configurados no .ini)
         mainChannelUrl = getattr(self.config, 'streamerYouTubeMainChannel', '').strip()
@@ -600,6 +650,56 @@ class GamingDashboard(QMainWindow):
 
         self.mainLayout.addLayout(navLayout)
 
+    def buildSessionBar(self):
+        self.sessionBar = QFrame()
+        self.sessionBar.setStyleSheet("""
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1e1b4b, stop:0.5 #0f172a, stop:1 #064e3b);
+                border: 2px solid #10b981;
+                border-radius: 10px;
+                padding: 6px 14px;
+            }
+        """)
+        sLayout = QHBoxLayout(self.sessionBar)
+        sLayout.setContentsMargins(8, 4, 8, 4)
+        sLayout.setSpacing(12)
+
+        self.lblSessionStatus = QLabel("🔴 SESSÃO DE GAMEPLAY ATIVA:")
+        self.lblSessionStatus.setStyleSheet("color: #34d399; font-weight: 900; font-size: 12px; letter-spacing: 0.5px;")
+        sLayout.addWidget(self.lblSessionStatus)
+
+        self.lblSessionGame = QLabel("Nenhum jogo em execução")
+        self.lblSessionGame.setStyleSheet("color: #ffffff; font-weight: bold; font-size: 13px;")
+        sLayout.addWidget(self.lblSessionGame)
+
+        sLayout.addStretch()
+
+        self.lblSessionTime = QLabel("⏱️ 00:00:00")
+        self.lblSessionTime.setStyleSheet("color: #38bdf8; font-weight: 900; font-size: 14px; font-family: monospace;")
+        sLayout.addWidget(self.lblSessionTime)
+
+        self.btnStopSession = QPushButton("⏹️ Encerrar Sessão & Salvar")
+        self.btnStopSession.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnStopSession.setStyleSheet("""
+            QPushButton {
+                background-color: #ef4444;
+                color: #ffffff;
+                font-weight: bold;
+                font-size: 11px;
+                border-radius: 6px;
+                padding: 5px 12px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #dc2626;
+            }
+        """)
+        self.btnStopSession.clicked.connect(self.onStopGameplaySession)
+        sLayout.addWidget(self.btnStopSession)
+
+        self.mainLayout.addWidget(self.sessionBar)
+        self.sessionBar.hide()
+
     def switchView(self, index):
         self.stack.setCurrentIndex(index)
         if index == 0:
@@ -701,11 +801,18 @@ class GamingDashboard(QMainWindow):
 
         self.platformBadge = QLabel("LOCAL")
         self.platformBadge.setObjectName("PlatformBadge")
+
+        self.hltbBadge = QLabel("⏱️ HLTB: --")
+        self.hltbBadge.setObjectName("HltbBadge")
+        self.hltbBadge.setStyleSheet(
+            "background-color: #8b5cf6; color: #ffffff; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;"
+        )
         
         heroHeader.addWidget(headerText)
         heroHeader.addStretch()
         heroHeader.addWidget(self.installBadge)
         heroHeader.addWidget(self.platformBadge)
+        heroHeader.addWidget(self.hltbBadge)
         layout.addLayout(heroHeader)
 
         # Cover Image Box
@@ -751,14 +858,14 @@ class GamingDashboard(QMainWindow):
         self.btnReroll.clicked.connect(self.onRerollHero)
         layout.addWidget(self.btnReroll)
 
-        # Intel & Streamer Actions
+        # Intel & Streamer Actions (Row 1)
         intelRow = QHBoxLayout()
         intelRow.setSpacing(8)
 
-        self.btnHeroIntel = QPushButton("ℹ️ Guia, Detonados & Dicas")
+        self.btnHeroIntel = QPushButton("ℹ️ Guia & Dicas")
         self.btnHeroIntel.setObjectName("BtnSecondary")
         self.btnHeroIntel.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btnHeroIntel.setToolTip("Abre central com sinopse, tempo de HowLongToBeat, GameFAQs e detonados")
+        self.btnHeroIntel.setToolTip("Abre central com sinopse, estimativas do HowLongToBeat e detonados")
         self.btnHeroIntel.clicked.connect(self.onOpenHeroIntel)
 
         self.btnRecordHeroLive = QPushButton("🔴 Gravar na Live")
@@ -770,6 +877,34 @@ class GamingDashboard(QMainWindow):
         intelRow.addWidget(self.btnHeroIntel)
         intelRow.addWidget(self.btnRecordHeroLive)
         layout.addLayout(intelRow)
+
+        # Streamer Suite Actions (Row 2: Roda da Fortuna, Modo Misterioso, Card da Live)
+        suiteRow = QHBoxLayout()
+        suiteRow.setSpacing(6)
+
+        self.btnWheelOfFortune = QPushButton("🎡 Roda da Fortuna")
+        self.btnWheelOfFortune.setObjectName("BtnSecondary")
+        self.btnWheelOfFortune.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnWheelOfFortune.setToolTip("Gira a Roda da Fortuna com física e suspense para escolher o jogo")
+        self.btnWheelOfFortune.clicked.connect(self.onOpenWheelOfFortune)
+        suiteRow.addWidget(self.btnWheelOfFortune)
+
+        self.btnMysteryMode = QPushButton("🕵️ Misterioso")
+        self.btnMysteryMode.setObjectName("BtnSecondary")
+        self.btnMysteryMode.setCheckable(True)
+        self.btnMysteryMode.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnMysteryMode.setToolTip("Modo Jogo Misterioso: oculta a capa e título até você ou o chat revelarem")
+        self.btnMysteryMode.clicked.connect(self.onToggleMysteryMode)
+        suiteRow.addWidget(self.btnMysteryMode)
+
+        self.btnSocialCard = QPushButton("📸 Card da Live")
+        self.btnSocialCard.setObjectName("BtnSecondary")
+        self.btnSocialCard.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnSocialCard.setToolTip("Gera imagem 1200x630 promocional para Comunidade do YouTube, Discord e Twitter")
+        self.btnSocialCard.clicked.connect(self.onGenerateSocialCard)
+        suiteRow.addWidget(self.btnSocialCard)
+
+        layout.addLayout(suiteRow)
 
         # Filter Category for Reroll
         filterRow = QHBoxLayout()
@@ -786,7 +921,10 @@ class GamingDashboard(QMainWindow):
             "Apenas Playnite (Lojas & Emuladores)",
             "Apenas eXoDOS (Instalados)",
             "Apenas Atalhos / Desktop",
-            "Apenas Pastas Locais"
+            "Apenas Pastas Locais",
+            "⏱️ Jogos Curtos (< 5h HLTB)",
+            "⏱️ Jogos Médios (5-15h HLTB)",
+            "⏱️ Jogos Longos (> 25h HLTB)"
         ])
         self.comboRerollFilter.currentIndexChanged.connect(self.onRerollHero)
         filterRow.addWidget(filterLbl)
@@ -1229,6 +1367,36 @@ class GamingDashboard(QMainWindow):
             btnPlayOpt.clicked.connect(lambda _, idx=i: self.onPlayChatChoice(idx))
             cLayout.addWidget(btnPlayOpt)
 
+            # Voting & Polling Row
+            voteRow = QHBoxLayout()
+            voteRow.setSpacing(6)
+
+            lblVoteCount = QLabel("0 votos (0%)")
+            lblVoteCount.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lblVoteCount.setStyleSheet("color: #38bdf8; font-weight: bold; font-size: 11px;")
+
+            btnVote = QPushButton("🗳️ +1 Voto")
+            btnVote.setCursor(Qt.CursorShape.PointingHandCursor)
+            btnVote.setStyleSheet("""
+                QPushButton {
+                    background-color: #1e293b;
+                    border: 1px solid #0284c7;
+                    color: #38bdf8;
+                    font-size: 11px;
+                    font-weight: bold;
+                    border-radius: 6px;
+                    padding: 4px 8px;
+                }
+                QPushButton:hover {
+                    background-color: #0369a1;
+                    color: #ffffff;
+                }
+            """)
+            btnVote.clicked.connect(lambda _, idx=i: self.onAddChatVote(idx))
+            voteRow.addWidget(lblVoteCount, 1)
+            voteRow.addWidget(btnVote)
+            cLayout.addLayout(voteRow)
+
             # Intel Button
             btnIntelOpt = QPushButton("ℹ️ Guia & Dicas")
             btnIntelOpt.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1258,6 +1426,7 @@ class GamingDashboard(QMainWindow):
                 "coverLabel": coverLabel,
                 "titleLabel": titleLabel,
                 "metaLabel": metaLabel,
+                "lblVoteCount": lblVoteCount,
                 "gameEntry": ""
             })
 
@@ -1393,14 +1562,85 @@ class GamingDashboard(QMainWindow):
     def updateHeroDisplay(self, gameEntry):
         self.currentChoice = gameEntry
         display_name = formatDisplayName(gameEntry)
-        self.gameTitleLabel.setText(display_name)
-
         platform = detectPlatform(gameEntry)
+
+        # Check Mystery Mode
+        if self.isMysteryMode and not self.mysteryRevealed:
+            self.gameTitleLabel.setText("🕵️ JOGO MISTERIOSO\n(Clique aqui ou na capa para revelar!)")
+            self.gameTitleLabel.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.platformBadge.setText("MISTERIOSO")
+            self.platformBadge.setStyleSheet("background-color: #6366f1; color: #ffffff; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;")
+            self.hltbBadge.setText("⏱️ ??h (HLTB)")
+            self.hltbBadge.setStyleSheet("background-color: #475569; color: #cbd5e1; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;")
+            self.gameStatsLabel.setText("Modo suspense ativado! Capa e título ocultos para o chat.")
+            
+            # Render Mystery Box Pixmap
+            m_pix = QPixmap(160, 160)
+            m_pix.fill(QColor("#0f172a"))
+            painter = QPainter(m_pix)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(QPen(QColor("#38bdf8"), 2))
+            painter.drawRoundedRect(4, 4, 152, 152, 10, 10)
+            painter.setPen(QColor("#00f2fe"))
+            painter.setFont(QFont("Segoe UI", 48, QFont.Weight.Bold))
+            painter.drawText(QRectF(0, 0, 160, 160), Qt.AlignmentFlag.AlignCenter, "❓")
+            painter.end()
+
+            self.imageLabel.setPixmap(m_pix)
+            self.imageLabel.setCursor(Qt.CursorShape.PointingHandCursor)
+            self.imageLabel.mousePressEvent = lambda e: self.onRevealMysteryGame()
+            self.gameTitleLabel.mousePressEvent = lambda e: self.onRevealMysteryGame()
+
+            if hasattr(self, 'btnMysteryMode'):
+                self.btnMysteryMode.setChecked(True)
+                self.btnMysteryMode.setText("👁️ Revelar Jogo")
+
+            update_overlay_game("❓ Jogo Misterioso", "???", "??h")
+            return
+
+        # Normal / Revealed Display
+        self.gameTitleLabel.setText(display_name)
+        self.gameTitleLabel.setCursor(Qt.CursorShape.ArrowCursor)
+        self.imageLabel.setCursor(Qt.CursorShape.ArrowCursor)
+        self.imageLabel.mousePressEvent = None
+        self.gameTitleLabel.mousePressEvent = None
+
+        if hasattr(self, 'btnMysteryMode'):
+            self.btnMysteryMode.setChecked(False)
+            self.btnMysteryMode.setText("🕵️ Misterioso")
+
         self.platformBadge.setText(platform.upper())
         self.platformBadge.setStyleSheet(
             f"background-color: {getPlatformColor(platform)}; color: #ffffff; "
             f"border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;"
         )
+
+        # HowLongToBeat Integration
+        try:
+            hltb_info = get_cached_hltb(display_name)
+            if not hltb_info:
+                # Fast background or synchronous fetch
+                hltb_info = fetch_hltb_data(display_name)
+            
+            if hltb_info and hltb_info.get("main_story", 0) > 0:
+                hours = hltb_info.get("main_story", 0)
+                dur_str = format_hltb_duration(hours)
+                self.hltbBadge.setText(dur_str)
+                self.hltbBadge.setStyleSheet(get_duration_badge_style(hours))
+                self.hltbBadge.setToolTip(
+                    f"Campanha Principal: {hours:.1f}h\n"
+                    f"História + Extras: {hltb_info.get('main_extra', 0):.1f}h\n"
+                    f"Complecionista (100%): {hltb_info.get('completionist', 0):.1f}h"
+                )
+                overlay_hltb = f"~{hours:.1f}h"
+            else:
+                self.hltbBadge.setText("⏱️ HLTB: --")
+                self.hltbBadge.setStyleSheet("background-color: #334155; color: #94a3b8; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;")
+                self.hltbBadge.setToolTip("Tempo não catalogado no HowLongToBeat")
+                overlay_hltb = "--"
+        except Exception as e:
+            logger.debug(f"Erro ao obter badge HLTB: {e}")
+            overlay_hltb = "--"
 
         info = findGameInfo(gameEntry)
         times_played = info[2] if info else 0
@@ -1479,6 +1719,9 @@ class GamingDashboard(QMainWindow):
             self.imageLabel.setPixmap(pix)
             if self.overlayWindow and self.overlayWindow.isVisible():
                 self.overlayWindow.updateGame(display_name, pix, platform)
+            
+            # Broadcast to OBS Web Overlay
+            update_overlay_game(display_name, platform, overlay_hltb)
         except Exception as e:
             logger.warning(f"Error rendering icon in dashboard: {e}")
 
@@ -1550,6 +1793,7 @@ class GamingDashboard(QMainWindow):
 
         if is_installed:
             logger.info(f"Launching Game of the Day: {target}")
+            self.startGameplaySession(target)
             self.showMinimized()
             executeGame(target, self.steamOwnedGames)
         else:
@@ -1616,6 +1860,7 @@ class GamingDashboard(QMainWindow):
         target = self.currentGoty.get('library_entry')
         if target:
             logger.info(f"Launching GOTY game: {target}")
+            self.startGameplaySession(target)
             self.showMinimized()
             executeGame(target, self.steamOwnedGames)
             self.refreshStats()
@@ -1820,6 +2065,40 @@ class GamingDashboard(QMainWindow):
                         logger.info(f"Carregados {len(filtered_content)} jogos de emuladores do Playnite sob demanda.")
                 except Exception as e:
                     logger.warning(f"Erro ao carregar jogos de emuladores sob demanda: {e}")
+        elif "Curtos" in filter_mode: # < 5h
+            def is_short(g):
+                t = formatDisplayName(g)
+                c = get_cached_hltb(t)
+                return c and 0 < c.get("main_story", 0) < 5.0
+            short_cands = [g for g in self.content if is_short(g)]
+            if short_cands:
+                filtered_content = short_cands
+            else:
+                # Sample random items and fetch
+                sample = random.sample(self.content, min(20, len(self.content)))
+                filtered_content = [g for g in sample if is_short(g)] or sample
+        elif "Médios" in filter_mode: # 5-15h
+            def is_med(g):
+                t = formatDisplayName(g)
+                c = get_cached_hltb(t)
+                return c and 5.0 <= c.get("main_story", 0) <= 15.0
+            med_cands = [g for g in self.content if is_med(g)]
+            if med_cands:
+                filtered_content = med_cands
+            else:
+                sample = random.sample(self.content, min(20, len(self.content)))
+                filtered_content = [g for g in sample if is_med(g)] or sample
+        elif "Longos" in filter_mode: # > 25h
+            def is_long(g):
+                t = formatDisplayName(g)
+                c = get_cached_hltb(t)
+                return c and c.get("main_story", 0) > 25.0
+            long_cands = [g for g in self.content if is_long(g)]
+            if long_cands:
+                filtered_content = long_cands
+            else:
+                sample = random.sample(self.content, min(20, len(self.content)))
+                filtered_content = [g for g in sample if is_long(g)] or sample
         elif "Playnite" in filter_mode:
             filtered_content = [
                 g for g in self.content 
@@ -1989,6 +2268,7 @@ class GamingDashboard(QMainWindow):
 
         if is_installed:
             logger.info(f"Launching game from Hero Card: {target}")
+            self.startGameplaySession(target)
             self.showMinimized()
             executeGame(target, self.steamOwnedGames)
         else:
@@ -2023,6 +2303,7 @@ class GamingDashboard(QMainWindow):
 
                 if is_installed:
                     logger.info(f"Launching game from Database Table: {target}")
+                    self.startGameplaySession(target)
                     self.showMinimized()
                     executeGame(target, self.steamOwnedGames)
                 else:
@@ -2180,12 +2461,19 @@ class GamingDashboard(QMainWindow):
             candidates = random.sample(self.content, 3)
 
         self.chatChoiceTrio = candidates
+        self.chatVotes = [0, 0, 0]
+
+        names = [formatDisplayName(g) for g in candidates]
+        update_overlay_poll(names[0], names[1], names[2], 0, 0, 0)
+
         for i, game in enumerate(candidates):
             card_info = self.trioCards[i]
             card_info["gameEntry"] = game
             card_info["titleLabel"].setText(formatDisplayName(game))
             plat = detectPlatform(game)
             card_info["metaLabel"].setText(f"Plataforma: {plat}")
+            if "lblVoteCount" in card_info:
+                card_info["lblVoteCount"].setText("0 votos (0%)")
 
             try:
                 pilImg = findGameIcon(game, playnitePath=getattr(self.config, 'playnitePath', ''))
@@ -2197,10 +2485,27 @@ class GamingDashboard(QMainWindow):
             except Exception:
                 pass
 
+    def onAddChatVote(self, index):
+        if 0 <= index < len(self.chatVotes):
+            self.chatVotes[index] += 1
+            total_votes = sum(self.chatVotes)
+            for i, card_info in enumerate(self.trioCards):
+                v = self.chatVotes[i]
+                pct = int((v / total_votes) * 100) if total_votes > 0 else 0
+                if "lblVoteCount" in card_info:
+                    card_info["lblVoteCount"].setText(f"{v} votos ({pct}%)")
+
+            names = [formatDisplayName(g) for g in self.chatChoiceTrio] if len(self.chatChoiceTrio) >= 3 else ["A", "B", "C"]
+            update_overlay_poll(
+                names[0], names[1], names[2],
+                self.chatVotes[0], self.chatVotes[1], self.chatVotes[2]
+            )
+
     def onPlayChatChoice(self, index):
         if 0 <= index < len(self.chatChoiceTrio):
             target = self.chatChoiceTrio[index]
             logger.info(f"Launching winning Chat Choice game: {target}")
+            self.startGameplaySession(target)
             self.showMinimized()
             executeGame(target, self.steamOwnedGames)
             self.refreshStats()
@@ -2223,6 +2528,197 @@ class GamingDashboard(QMainWindow):
         if cb:
             cb.setText(poll_text)
             QMessageBox.information(self, "Enquete Copiada!", f"Texto da enquete copiado para o Clipboard:\n\n{poll_text}")
+
+    # -------------------------------------------------------------
+    # Session Gameplay Timer & Stopwatch
+    # -------------------------------------------------------------
+    def startGameplaySession(self, gameEntry):
+        self.activePlayingGame = gameEntry
+        self.sessionStartTime = time.time()
+        name = formatDisplayName(gameEntry)
+        self.lblSessionGame.setText(name)
+        self.lblSessionTime.setText("⏱️ 00:00:00")
+        self.sessionBar.show()
+        self.sessionTimer.start()
+        update_overlay_timer("00:00:00")
+
+    def _onSessionTimerTick(self):
+        if not self.sessionStartTime:
+            return
+        elapsed_sec = int(time.time() - self.sessionStartTime)
+        hours = elapsed_sec // 3600
+        minutes = (elapsed_sec % 3600) // 60
+        seconds = elapsed_sec % 60
+        time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        self.lblSessionTime.setText(f"⏱️ {time_str}")
+        update_overlay_timer(time_str)
+
+    def onStopGameplaySession(self):
+        if not self.sessionStartTime or not self.activePlayingGame:
+            self.sessionBar.hide()
+            return
+        
+        elapsed_sec = int(time.time() - self.sessionStartTime)
+        duration_hours = round(elapsed_sec / 3600.0, 2)
+        if duration_hours < 0.01:
+            duration_hours = 0.01
+        
+        minutes = int(elapsed_sec // 60)
+        game_name = self.activePlayingGame
+        display_name = formatDisplayName(game_name)
+
+        # Stop timer
+        self.sessionTimer.stop()
+        self.sessionStartTime = None
+        self.sessionBar.hide()
+        update_overlay_timer("00:00:00")
+
+        # Save to Live History automatically
+        self.liveHistoryMgr.recordLive(
+            gameName=game_name,
+            durationHours=duration_hours,
+            notes=f"Sessão de gameplay ({minutes} minutos) finalizada pelo streamer"
+        )
+        self.refreshLiveHistoryTable()
+
+        QMessageBox.information(
+            self,
+            "Sessão Finalizada",
+            f"<b>Sessão de gameplay gravada com sucesso!</b><br><br>"
+            f"• Jogo: <b>{display_name}</b><br>"
+            f"• Duração: <font color='#00cec9'><b>{minutes} minutos ({duration_hours}h)</b></font><br><br>"
+            f"O registro foi adicionado automaticamente ao seu Histórico de Lives."
+        )
+
+    # -------------------------------------------------------------
+    # Modo Jogo Misterioso (Blind Pick)
+    # -------------------------------------------------------------
+    def onToggleMysteryMode(self):
+        self.isMysteryMode = not self.isMysteryMode
+        self.mysteryRevealed = False
+        self.updateHeroDisplay(self.currentChoice)
+
+    def onRevealMysteryGame(self):
+        if self.isMysteryMode and not self.mysteryRevealed:
+            self.mysteryRevealed = True
+            self.updateHeroDisplay(self.currentChoice)
+
+    # -------------------------------------------------------------
+    # Roda da Fortuna (Wheel of Fortune)
+    # -------------------------------------------------------------
+    def onOpenWheelOfFortune(self):
+        # Pick 8-12 distinct candidates from current library/filters
+        pool = self.content if self.content else [self.currentChoice]
+        cands_count = min(12, len(pool))
+        cands = random.sample(pool, cands_count) if len(pool) >= cands_count else pool
+
+        dlg = WheelOfFortuneDialog(cands, self)
+        if dlg.exec():
+            winner = dlg.get_winner()
+            if winner:
+                self.updateHeroDisplay(winner)
+                self.stack.setCurrentIndex(0)
+                self.btnNavMain.setChecked(True)
+
+    # -------------------------------------------------------------
+    # Social Card Generator (1200x630 PNG)
+    # -------------------------------------------------------------
+    def onGenerateSocialCard(self):
+        pix = self.imageLabel.pixmap()
+        liveChannelUrl = getattr(self.config, 'streamerYouTubeLiveChannel', '').strip()
+        mainChannelUrl = getattr(self.config, 'streamerYouTubeMainChannel', '').strip()
+        handle = extractChannelHandle(liveChannelUrl or mainChannelUrl, "@Hablocher")
+
+        try:
+            out_path = generate_live_card(
+                self.currentChoice,
+                cover_pixmap=pix,
+                channel_name=handle,
+                custom_tag="🎮 JOGO DA LIVE",
+                out_dir="screenshots"
+            )
+
+            msgBox = QMessageBox(self)
+            msgBox.setWindowTitle("Card Social Gerado!")
+            msgBox.setIcon(QMessageBox.Icon.Information)
+            msgBox.setTextFormat(Qt.TextFormat.RichText)
+            msgBox.setText(
+                f"<b>Imagem promocional de alta resolução (1200x630) gerada com sucesso!</b><br><br>"
+                f"Arquivo salvo em:<br><code>{out_path}</code><br><br>"
+                f"Perfeita para a <b>Aba Comunidade do YouTube, Discord e Twitter/X</b>."
+            )
+            btnOpen = msgBox.addButton("📂 Abrir Imagem", QMessageBox.ButtonRole.ActionRole)
+            msgBox.addButton("OK", QMessageBox.ButtonRole.AcceptRole)
+            msgBox.exec()
+
+            if msgBox.clickedButton() == btnOpen:
+                try:
+                    os.startfile(out_path)
+                except Exception as e:
+                    logger.warning(f"Não foi possível abrir a imagem: {e}")
+        except Exception as e:
+            logger.error(f"Erro ao gerar card social: {e}", exc_info=True)
+            QMessageBox.critical(self, "Erro", f"Não foi possível gerar a imagem:\n{e}")
+
+    # -------------------------------------------------------------
+    # Web Overlay & 1-Click Playnite Exporter
+    # -------------------------------------------------------------
+    def onOpenWebOverlay(self):
+        url = "http://localhost:8089/overlay"
+        try:
+            webbrowser.open(url)
+        except Exception as e:
+            logger.warning(f"Erro ao abrir overlay: {e}")
+        
+        cb = QApplication.clipboard()
+        if cb:
+            cb.setText(url)
+            QMessageBox.information(
+                self,
+                "Overlay Web para OBS Studio",
+                f"<b>O endereço do overlay foi copiado para sua área de transferência:</b><br><br>"
+                f"<code>{url}</code><br><br>"
+                f"<b>No OBS Studio:</b><br>"
+                f"1. Adicione uma nova fonte do tipo <b>'Navegador' (Browser Source)</b><br>"
+                f"2. Cole a URL acima<br>"
+                f"3. Defina a largura como <b>600</b> e altura como <b>240</b> (ou 400x320 para o widget de enquete <code>http://localhost:8089/overlay/poll</code>)<br>"
+                f"4. Marque 'Controlar áudio via OBS' se desejar."
+            )
+
+    def onExportPlaynite(self):
+        script_path = os.path.abspath("export_playnite_library.ps1")
+        if not os.path.exists(script_path):
+            QMessageBox.warning(self, "Aviso", f"Script não encontrado: {script_path}")
+            return
+        
+        progress = QProgressDialog("Disparando exportação da biblioteca do Playnite...", None, 0, 0, self)
+        progress.setWindowTitle("Exportando Playnite")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.show()
+        QApplication.processEvents()
+
+        try:
+            cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            progress.close()
+
+            if res.returncode == 0:
+                # Ask to sync sources immediately
+                reply = QMessageBox.question(
+                    self,
+                    "Exportação Concluída",
+                    "<b>A biblioteca do Playnite foi exportada com sucesso!</b><br><br>"
+                    "Deseja recarregar as fontes e sincronizar os novos jogos no banco de dados agora?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.onSyncSources()
+            else:
+                QMessageBox.warning(self, "Exportação Playnite", f"A exportação retornou código {res.returncode}:\n{res.stderr[:300]}")
+        except Exception as e:
+            progress.close()
+            logger.error(f"Erro ao rodar export_playnite_library.ps1: {e}")
+            QMessageBox.critical(self, "Erro", f"Falha ao executar script de exportação:\n{e}")
 
     # -------------------------------------------------------------
     # Live History Handlers

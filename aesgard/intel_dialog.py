@@ -227,6 +227,82 @@ class GameIntelDialog(QDialog):
             mLayout.addWidget(noManual)
 
         self.tabs.addTab(manualsWidget, "📚 Manuais Locais")
+
+        # Tab 4: HowLongToBeat (Estimativas de Duração da Campanha)
+        hltbWidget = QWidget()
+        hLayout = QVBoxLayout(hltbWidget)
+        hLayout.setContentsMargins(18, 18, 18, 18)
+        hLayout.setSpacing(14)
+
+        try:
+            from aesgard.hltb import fetch_hltb_data
+            hltb_info = fetch_hltb_data(self.intel['cleanTitle'])
+        except Exception:
+            hltb_info = None
+
+        if hltb_info and any(hltb_info.get(k, 0) > 0 for k in ("main_story", "main_extra", "completionist")):
+            hIntro = QLabel(f"⏱️ Estimativas de conclusão baseadas na comunidade HowLongToBeat:")
+            hIntro.setStyleSheet("color: #38bdf8; font-size: 13px; font-weight: bold;")
+            hLayout.addWidget(hIntro)
+
+            cardsRow = QHBoxLayout()
+            cardsRow.setSpacing(12)
+
+            stats = [
+                ("História Principal", hltb_info.get("main_story", 0), "#10b981", "⚡"),
+                ("História + Extras", hltb_info.get("main_extra", 0), "#06b6d4", "🎯"),
+                ("Complecionista (100%)", hltb_info.get("completionist", 0), "#8b5cf6", "🏆"),
+                ("Média Geral", hltb_info.get("all_styles", 0), "#f59e0b", "📊")
+            ]
+
+            for s_title, s_hours, s_color, s_icon in stats:
+                card = QFrame()
+                card.setStyleSheet(f"""
+                    QFrame {{
+                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #161b26, stop:1 #0f141f);
+                        border: 1px solid #242b3b;
+                        border-top: 3px solid {s_color};
+                        border-radius: 10px;
+                        padding: 12px;
+                    }}
+                """)
+                cLayout = QVBoxLayout(card)
+                cLayout.setSpacing(6)
+                cLayout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+                iconLbl = QLabel(s_icon)
+                iconLbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                iconLbl.setStyleSheet("font-size: 24px;")
+                cLayout.addWidget(iconLbl)
+
+                timeLbl = QLabel(f"{s_hours:.1f}h" if s_hours > 0 else "--")
+                timeLbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                timeLbl.setStyleSheet(f"font-size: 20px; font-weight: 900; color: {s_color};")
+                cLayout.addWidget(timeLbl)
+
+                subLbl = QLabel(s_title)
+                subLbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                subLbl.setStyleSheet("font-size: 11px; color: #94a3b8; font-weight: bold;")
+                cLayout.addWidget(subLbl)
+
+                cardsRow.addWidget(card)
+
+            hLayout.addLayout(cardsRow)
+
+            if hltb_info.get("hltb_url"):
+                btnHltbWeb = QPushButton("🔗 Ver Ficha Completa no HowLongToBeat.com")
+                btnHltbWeb.setCursor(Qt.CursorShape.PointingHandCursor)
+                btnHltbWeb.setStyleSheet("background-color: #1e2433; color: #38bdf8; border: 1px solid #0284c7; padding: 10px; border-radius: 8px;")
+                btnHltbWeb.clicked.connect(lambda _, u=hltb_info["hltb_url"]: webbrowser.open(u))
+                hLayout.addWidget(btnHltbWeb)
+        else:
+            noHltb = QLabel("Estimativas detalhadas não encontradas no HowLongToBeat para este título.\nVocê ainda pode consultar o link na aba 'Detonados & Walkthroughs'.")
+            noHltb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            noHltb.setStyleSheet("color: #718096; font-size: 13px; padding: 40px;")
+            hLayout.addWidget(noHltb)
+
+        hLayout.addStretch()
+        self.tabs.addTab(hltbWidget, "⏱️ HowLongToBeat")
         mainLayout.addWidget(self.tabs, 1)
 
         # Bottom Buttons
