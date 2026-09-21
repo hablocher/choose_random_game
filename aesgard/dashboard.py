@@ -39,7 +39,10 @@ from aesgard.database import (
 from aesgard.ui import formatDisplayName, detectPlatform, getPlatformColor, clearPlayniteMetaCache
 from aesgard.intel_dialog import GameIntelDialog
 from aesgard.streamer import LiveHistoryManager, StreamerOverlayWindow
-from aesgard.hltb import get_cached_hltb, fetch_hltb_data, format_hltb_duration, get_duration_badge_style
+from aesgard.hltb import (
+    get_cached_hltb, fetch_hltb_data, format_hltb_duration, get_duration_badge_style,
+    clean_title_for_hltb, get_all_cached_durations, preload_hltb_cache
+)
 from aesgard.web_overlay import (
     start_overlay_server, update_overlay_game, update_overlay_timer, 
     update_overlay_channel, update_overlay_poll, record_poll_vote
@@ -1615,29 +1618,51 @@ class GamingDashboard(QMainWindow):
             f"border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;"
         )
 
-        # HowLongToBeat Integration
-        try:
-            hltb_info = get_cached_hltb(display_name)
-            if not hltb_info:
-                # Fast background or synchronous fetch
-                hltb_info = fetch_hltb_data(display_name)
-            
-            if hltb_info and hltb_info.get("main_story", 0) > 0:
-                hours = hltb_info.get("main_story", 0)
+        # HowLongToBeat Integration (Zero-freeze: instant cache + async background worker)
+        overlay_hltb = "--"
+        def _apply_hltb_ui(data):
+            if data and data.get("main_story", 0) > 0:
+                hours = data.get("main_story", 0)
                 dur_str = format_hltb_duration(hours)
                 self.hltbBadge.setText(dur_str)
                 self.hltbBadge.setStyleSheet(get_duration_badge_style(hours))
                 self.hltbBadge.setToolTip(
                     f"Campanha Principal: {hours:.1f}h\n"
-                    f"História + Extras: {hltb_info.get('main_extra', 0):.1f}h\n"
-                    f"Complecionista (100%): {hltb_info.get('completionist', 0):.1f}h"
+                    f"História + Extras: {data.get('main_extra', 0):.1f}h\n"
+                    f"Complecionista (100%): {data.get('completionist', 0):.1f}h"
                 )
-                overlay_hltb = f"~{hours:.1f}h"
+                update_overlay_game(display_name, platform, f"~{hours:.1f}h")
             else:
                 self.hltbBadge.setText("⏱️ HLTB: --")
                 self.hltbBadge.setStyleSheet("background-color: #334155; color: #94a3b8; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;")
                 self.hltbBadge.setToolTip("Tempo não catalogado no HowLongToBeat")
+                update_overlay_game(display_name, platform, "--")
+
+        try:
+            hltb_info = get_cached_hltb(display_name)
+            if hltb_info is not None:
+                _apply_hltb_ui(hltb_info)
+                if hltb_info.get("main_story", 0) > 0:
+                    overlay_hltb = f"~{hltb_info.get('main_story', 0):.1f}h"
+            else:
+                # Fast asynchronous background fetch - never freeze GUI thread
+                self.hltbBadge.setText("⏱️ HLTB: ...")
+                self.hltbBadge.setStyleSheet("background-color: #1e293b; color: #38bdf8; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;")
+                self.hltbBadge.setToolTip("Consultando estimativa no HowLongToBeat em segundo plano...")
                 overlay_hltb = "--"
+
+                def _fetch_bg(target_entry, target_name):
+                    try:
+                        res = fetch_hltb_data(target_name)
+                        def _update_if_current():
+                            if getattr(self, 'currentChoice', None) == target_entry:
+                                _apply_hltb_ui(res)
+                        QTimer.singleShot(0, _update_if_current)
+                    except Exception as ex:
+                        logger.debug(f"Async HLTB error: {ex}")
+
+                import threading
+                threading.Thread(target=_fetch_bg, args=(gameEntry, display_name), daemon=True).start()
         except Exception as e:
             logger.debug(f"Erro ao obter badge HLTB: {e}")
             overlay_hltb = "--"
@@ -2066,39 +2091,65 @@ class GamingDashboard(QMainWindow):
                 except Exception as e:
                     logger.warning(f"Erro ao carregar jogos de emuladores sob demanda: {e}")
         elif "Curtos" in filter_mode: # < 5h
-            def is_short(g):
-                t = formatDisplayName(g)
-                c = get_cached_hltb(t)
-                return c and 0 < c.get("main_story", 0) < 5.0
-            short_cands = [g for g in self.content if is_short(g)]
-            if short_cands:
+            preload_hltb_cache()
+            all_durations = get_all_cached_durations()
+            short_cands = []
+            for g in self.content:
+                clean = clean_title_for_hltb(formatDisplayName(g)).lower()
+                dur = all_durations.get(clean, 0.0)
+                if not dur and ":" in clean:
+                    dur = all_durations.get(clean.split(":")[0].strip(), 0.0)
+                if 0 < dur < 5.0:
+                    short_cands.append(g)
+
+            if len(short_cands) >= 5:
                 filtered_content = short_cands
             else:
-                # Sample random items and fetch
-                sample = random.sample(self.content, min(20, len(self.content)))
-                filtered_content = [g for g in sample if is_short(g)] or sample
+                # Fast smart fallback: Retro, Arcade, DOS games are historically short (< 5h)
+                retro_platforms = {"eXoDOS", "DOSBox", "NES", "SNES", "Arcade", "MAME", "Master System", "Mega Drive", "Game Boy", "Game Boy Advance", "Atari"}
+                retro_cands = [
+                    g for g in self.content 
+                    if detectPlatform(g) in retro_platforms or g.startswith(exodosPrefix) or "[eXoDOS]" in g
+                ]
+                candidate_pool = list(dict.fromkeys(short_cands + retro_cands))
+                filtered_content = candidate_pool if candidate_pool else self.content
         elif "Médios" in filter_mode: # 5-15h
-            def is_med(g):
-                t = formatDisplayName(g)
-                c = get_cached_hltb(t)
-                return c and 5.0 <= c.get("main_story", 0) <= 15.0
-            med_cands = [g for g in self.content if is_med(g)]
+            preload_hltb_cache()
+            all_durations = get_all_cached_durations()
+            med_cands = []
+            for g in self.content:
+                clean = clean_title_for_hltb(formatDisplayName(g)).lower()
+                dur = all_durations.get(clean, 0.0)
+                if not dur and ":" in clean:
+                    dur = all_durations.get(clean.split(":")[0].strip(), 0.0)
+                if 5.0 <= dur <= 15.0:
+                    med_cands.append(g)
+
             if med_cands:
                 filtered_content = med_cands
             else:
-                sample = random.sample(self.content, min(20, len(self.content)))
-                filtered_content = [g for g in sample if is_med(g)] or sample
+                filtered_content = [g for g in self.content if not g.startswith(exodosPrefix)] or self.content
         elif "Longos" in filter_mode: # > 25h
-            def is_long(g):
-                t = formatDisplayName(g)
-                c = get_cached_hltb(t)
-                return c and c.get("main_story", 0) > 25.0
-            long_cands = [g for g in self.content if is_long(g)]
+            preload_hltb_cache()
+            all_durations = get_all_cached_durations()
+            long_cands = []
+            for g in self.content:
+                clean = clean_title_for_hltb(formatDisplayName(g)).lower()
+                dur = all_durations.get(clean, 0.0)
+                if not dur and ":" in clean:
+                    dur = all_durations.get(clean.split(":")[0].strip(), 0.0)
+                if dur > 25.0:
+                    long_cands.append(g)
+
             if long_cands:
                 filtered_content = long_cands
             else:
-                sample = random.sample(self.content, min(20, len(self.content)))
-                filtered_content = [g for g in sample if is_long(g)] or sample
+                rpg_keywords = {"rpg", "witcher", "scrolls", "fallout", "souls", "fantasy", "dragon", "divinity", "crusader", "civilization", "persona", "quest", "chronicles", "tactics", "ogre"}
+                rpg_cands = [
+                    g for g in self.content 
+                    if any(kw in g.lower() for kw in rpg_keywords)
+                ]
+                filtered_content = rpg_cands or self.content
         elif "Playnite" in filter_mode:
             filtered_content = [
                 g for g in self.content 
