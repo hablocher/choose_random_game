@@ -49,6 +49,14 @@ from aesgard.web_overlay import (
 )
 from aesgard.wheel_dialog import WheelOfFortuneDialog
 from aesgard.card_generator import generate_live_card
+from aesgard.sound import get_sound_manager
+from aesgard.vibe import classify_game_vibe, filter_games_by_vibe, generate_curator_pitch
+from aesgard.challenges import get_random_challenge, set_active_challenge, get_active_challenge, clear_challenge
+from aesgard.bingo import LiveBingoDialog
+from aesgard.chat_bot import get_chat_bot
+from aesgard.achievements import unlock_achievement, AchievementsDialog
+from aesgard.analytics import AnalyticsDialog
+from aesgard.backup import backup_game_saves
 import subprocess
 import time
 
@@ -193,9 +201,10 @@ QPushButton#BtnSecondary {
     background-color: #222734;
     border: 1px solid #323b4f;
     color: #cbd5e1;
-    font-size: 12px;
+    font-size: 11px;
+    font-weight: 600;
     border-radius: 6px;
-    padding: 6px 12px;
+    padding: 5px 9px;
 }
 QPushButton#BtnSecondary:hover {
     background-color: #2a3142;
@@ -462,7 +471,7 @@ class GamingDashboard(QMainWindow):
         headerLayout.addLayout(titleBox)
 
         # Synchronize Sources Button
-        self.btnSyncSources = QPushButton("🔄 Sincronizar Fontes")
+        self.btnSyncSources = QPushButton("🔄 Sincronizar")
         self.btnSyncSources.setObjectName("BtnSecondary")
         self.btnSyncSources.setToolTip("Re-importa e sincroniza todos os jogos (instalados ou não) de todas as fontes (Playnite, eXoDOS, atalhos, pastas)")
         self.btnSyncSources.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -470,7 +479,7 @@ class GamingDashboard(QMainWindow):
         headerLayout.addWidget(self.btnSyncSources)
 
         # Clean Database Button
-        self.btnCleanDb = QPushButton("🧹 Limpar Banco")
+        self.btnCleanDb = QPushButton("🧹 Limpar")
         self.btnCleanDb.setObjectName("BtnSecondary")
         self.btnCleanDb.setToolTip("Verifica jogos que não estão mais instalados e os marca como NÃO INSTALADOS (preserva histórico e favoritos)")
         self.btnCleanDb.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -478,7 +487,7 @@ class GamingDashboard(QMainWindow):
         headerLayout.addWidget(self.btnCleanDb)
 
         # 1-Click Playnite Exporter
-        self.btnExportPlaynite = QPushButton("⚡ Exportar Playnite")
+        self.btnExportPlaynite = QPushButton("⚡ Playnite")
         self.btnExportPlaynite.setObjectName("BtnSecondary")
         self.btnExportPlaynite.setToolTip("Dispara o script do Playnite para re-exportar a biblioteca completa (jogos de PC e emuladores)")
         self.btnExportPlaynite.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -486,12 +495,37 @@ class GamingDashboard(QMainWindow):
         headerLayout.addWidget(self.btnExportPlaynite)
 
         # Web Overlay for OBS
-        self.btnWebOverlay = QPushButton("📡 Overlay OBS")
+        self.btnWebOverlay = QPushButton("📡 Overlay")
         self.btnWebOverlay.setObjectName("BtnSecondary")
         self.btnWebOverlay.setToolTip("Abre o Overlay HTML5 para OBS Studio no navegador (http://localhost:8089/overlay)")
         self.btnWebOverlay.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnWebOverlay.clicked.connect(self.onOpenWebOverlay)
         headerLayout.addWidget(self.btnWebOverlay)
+
+        # Analytics Button
+        self.btnAnalytics = QPushButton("📊 Métricas")
+        self.btnAnalytics.setObjectName("BtnSecondary")
+        self.btnAnalytics.setToolTip("Abre o painel visual com gráficos de plataformas, taxas de conclusão e horas de backlog")
+        self.btnAnalytics.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnAnalytics.clicked.connect(self.onOpenAnalytics)
+        headerLayout.addWidget(self.btnAnalytics)
+
+        # Trophies Button
+        self.btnAchievements = QPushButton("🏆 Troféus")
+        self.btnAchievements.setObjectName("BtnSecondary")
+        self.btnAchievements.setToolTip("Galeria com as 12 conquistas e troféus do backlog")
+        self.btnAchievements.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnAchievements.clicked.connect(self.onOpenAchievements)
+        headerLayout.addWidget(self.btnAchievements)
+
+        # Sound Toggle Button
+        self.btnSound = QPushButton("🔊")
+        self.btnSound.setFixedWidth(36)
+        self.btnSound.setObjectName("BtnSecondary")
+        self.btnSound.setToolTip("Ativar/Desativar efeitos sonoros retrô")
+        self.btnSound.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnSound.clicked.connect(self.onToggleSound)
+        headerLayout.addWidget(self.btnSound)
 
         # YouTube Channels (Configurados no .ini)
         mainChannelUrl = getattr(self.config, 'streamerYouTubeMainChannel', '').strip()
@@ -503,7 +537,7 @@ class GamingDashboard(QMainWindow):
 
             if mainChannelUrl:
                 mainHandle = extractChannelHandle(mainChannelUrl, "@CanalPrincipal")
-                self.btnYtMain = QPushButton(f"📺 Principal: {mainHandle}")
+                self.btnYtMain = QPushButton(f"📺 {mainHandle}")
                 self.btnYtMain.setCursor(Qt.CursorShape.PointingHandCursor)
                 self.btnYtMain.setToolTip(f"Canal Principal no YouTube:\n{mainChannelUrl}")
                 self.btnYtMain.setStyleSheet("""
@@ -512,7 +546,7 @@ class GamingDashboard(QMainWindow):
                         color: #ff7675;
                         border: 1px solid #ff4757;
                         border-radius: 6px;
-                        padding: 4px 10px;
+                        padding: 4px 8px;
                         font-size: 11px;
                         font-weight: bold;
                     }
@@ -526,7 +560,7 @@ class GamingDashboard(QMainWindow):
 
             if liveChannelUrl:
                 liveHandle = extractChannelHandle(liveChannelUrl, "@CanalLives")
-                self.btnYtLive = QPushButton(f"🔴 Lives: {liveHandle}")
+                self.btnYtLive = QPushButton(f"🔴 {liveHandle}")
                 self.btnYtLive.setCursor(Qt.CursorShape.PointingHandCursor)
                 self.btnYtLive.setToolTip(f"Canal de Lives no YouTube:\n{liveChannelUrl}")
                 self.btnYtLive.setStyleSheet("""
@@ -535,7 +569,7 @@ class GamingDashboard(QMainWindow):
                         color: #a29bfe;
                         border: 1px solid #6c5ce7;
                         border-radius: 6px;
-                        padding: 4px 10px;
+                        padding: 4px 8px;
                         font-size: 11px;
                         font-weight: bold;
                     }
@@ -570,7 +604,7 @@ class GamingDashboard(QMainWindow):
         card = QFrame()
         card.setObjectName("StatCard")
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(14, 8, 14, 8)
+        layout.setContentsMargins(10, 5, 10, 5)
         layout.setSpacing(2)
 
         valLabel = QLabel(initialValue)
@@ -847,6 +881,35 @@ class GamingDashboard(QMainWindow):
 
         layout.addSpacing(4)
 
+        # Challenge Banner (dismissible)
+        self.challengeBanner = QFrame()
+        self.challengeBanner.setStyleSheet("""
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #450a0a, stop:1 #1e1b4b);
+                border: 2px solid #ef4444;
+                border-radius: 8px;
+                padding: 6px 10px;
+            }
+        """)
+        ch_l = QHBoxLayout(self.challengeBanner)
+        ch_l.setContentsMargins(6, 4, 6, 4)
+        ch_l.setSpacing(8)
+        self.challengeIconLbl = QLabel("💀")
+        self.challengeIconLbl.setFont(QFont("Segoe UI", 16))
+        ch_l.addWidget(self.challengeIconLbl)
+        self.challengeTitleLbl = QLabel("Desafio da Live Ativo")
+        self.challengeTitleLbl.setStyleSheet("color: #fca5a5; font-size: 11px;")
+        self.challengeTitleLbl.setWordWrap(True)
+        ch_l.addWidget(self.challengeTitleLbl, 1)
+
+        btnDismissCh = QPushButton("✕")
+        btnDismissCh.setFixedSize(22, 22)
+        btnDismissCh.setStyleSheet("QPushButton { background: transparent; color: #f87171; font-weight: bold; border: none; } QPushButton:hover { color: #ffffff; }")
+        btnDismissCh.clicked.connect(lambda: (clear_challenge(), self.challengeBanner.hide()))
+        ch_l.addWidget(btnDismissCh)
+        self.challengeBanner.hide()
+        layout.addWidget(self.challengeBanner)
+
         # Big Play Button
         self.btnPlay = QPushButton("▶  JOGAR AGORA")
         self.btnPlay.setObjectName("BtnPlay")
@@ -871,6 +934,12 @@ class GamingDashboard(QMainWindow):
         self.btnHeroIntel.setToolTip("Abre central com sinopse, estimativas do HowLongToBeat e detonados")
         self.btnHeroIntel.clicked.connect(self.onOpenHeroIntel)
 
+        self.btnCuratorPitch = QPushButton("💡 Por que Jogar?")
+        self.btnCuratorPitch.setObjectName("BtnSecondary")
+        self.btnCuratorPitch.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnCuratorPitch.setToolTip("Exibe a resenha rápida de curadoria e dicas para manter o chat engajado")
+        self.btnCuratorPitch.clicked.connect(self.onOpenCuratorPitch)
+
         self.btnRecordHeroLive = QPushButton("🔴 Gravar na Live")
         self.btnRecordHeroLive.setObjectName("BtnSecondary")
         self.btnRecordHeroLive.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -878,6 +947,7 @@ class GamingDashboard(QMainWindow):
         self.btnRecordHeroLive.clicked.connect(self.onRecordCurrentHeroLive)
 
         intelRow.addWidget(self.btnHeroIntel)
+        intelRow.addWidget(self.btnCuratorPitch)
         intelRow.addWidget(self.btnRecordHeroLive)
         layout.addLayout(intelRow)
 
@@ -909,6 +979,40 @@ class GamingDashboard(QMainWindow):
 
         layout.addLayout(suiteRow)
 
+        # Live Tools Row (Row 3: Desafio, Bingo, Backup, Bot Twitch)
+        toolsRow = QHBoxLayout()
+        toolsRow.setSpacing(6)
+
+        self.btnLiveChallenge = QPushButton("💀 Desafio Live")
+        self.btnLiveChallenge.setObjectName("BtnSecondary")
+        self.btnLiveChallenge.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnLiveChallenge.setToolTip("Sorteia um desafio ou penalidade cômica para o streamer cumprir ao vivo")
+        self.btnLiveChallenge.clicked.connect(self.onRollLiveChallenge)
+        toolsRow.addWidget(self.btnLiveChallenge)
+
+        self.btnLiveBingo = QPushButton("🎯 Bingo")
+        self.btnLiveBingo.setObjectName("BtnSecondary")
+        self.btnLiveBingo.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnLiveBingo.setToolTip("Abre a cartela interativa de Bingo da Live (também visível no OBS em /bingo)")
+        self.btnLiveBingo.clicked.connect(self.onOpenLiveBingo)
+        toolsRow.addWidget(self.btnLiveBingo)
+
+        self.btnBackupSave = QPushButton("💾 Backup Save")
+        self.btnBackupSave.setObjectName("BtnSecondary")
+        self.btnBackupSave.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnBackupSave.setToolTip("Cria um backup compactado .zip instantâneo dos saves deste jogo")
+        self.btnBackupSave.clicked.connect(self.onBackupCurrentSave)
+        toolsRow.addWidget(self.btnBackupSave)
+
+        self.btnChatBot = QPushButton("💬 Bot Twitch")
+        self.btnChatBot.setObjectName("BtnSecondary")
+        self.btnChatBot.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnChatBot.setToolTip("Conecta ao chat da Twitch para receber votos !voto 1/2/3 automaticamente")
+        self.btnChatBot.clicked.connect(self.onToggleChatBot)
+        toolsRow.addWidget(self.btnChatBot)
+
+        layout.addLayout(toolsRow)
+
         # Filter Category for Reroll
         filterRow = QHBoxLayout()
         filterLbl = QLabel("Filtrar sorteio:")
@@ -927,7 +1031,13 @@ class GamingDashboard(QMainWindow):
             "Apenas Pastas Locais",
             "⏱️ Jogos Curtos (< 5h HLTB)",
             "⏱️ Jogos Médios (5-15h HLTB)",
-            "⏱️ Jogos Longos (> 25h HLTB)"
+            "⏱️ Jogos Longos (> 25h HLTB)",
+            "🧘 Vibe: Zen & Relaxar",
+            "⚡ Vibe: Pura Adrenalina",
+            "👻 Vibe: Terror & Suspense",
+            "📜 Vibe: História & Imersão",
+            "🕹️ Vibe: Nostalgia Retrô",
+            "🧠 Vibe: Estratégia & Raciocínio"
         ])
         self.comboRerollFilter.currentIndexChanged.connect(self.onRerollHero)
         filterRow.addWidget(filterLbl)
@@ -2169,6 +2279,25 @@ class GamingDashboard(QMainWindow):
                         logger.info(f"Carregados {len(pn_entries)} jogos do Playnite sob demanda.")
                 except Exception as e:
                     logger.warning(f"Erro ao carregar jogos do Playnite sob demanda: {e}")
+        elif "Vibe: " in filter_mode:
+            v_map = {
+                "Zen": "zen",
+                "Adrenalina": "adrenaline",
+                "Terror": "horror",
+                "História": "story",
+                "Retrô": "retro",
+                "Estratégia": "strategy"
+            }
+            v_k = "zen"
+            for k, val in v_map.items():
+                if k in filter_mode:
+                    v_k = val
+                    break
+            filtered_content = filter_games_by_vibe(self.content, v_k)
+
+        self._reroll_count = getattr(self, '_reroll_count', 0) + 1
+        if self._reroll_count >= 20:
+            unlock_achievement("roulette_addict", self)
 
         if not filtered_content:
             QMessageBox.information(
@@ -2396,6 +2525,17 @@ class GamingDashboard(QMainWindow):
         current_fin = info[4] if info else 0
         new_fin = 0 if current_fin else 1
         setFinished(self.currentChoice, new_fin)
+        if new_fin == 1:
+            get_sound_manager().play("victory")
+            unlock_achievement("first_blood", self)
+            stats = getDatabaseStats()
+            if stats.get("finished", 0) >= 5:
+                unlock_achievement("backlog_warrior", self)
+            if stats.get("finished", 0) >= 10:
+                unlock_achievement("backlog_master", self)
+            c = get_cached_hltb(formatDisplayName(self.currentChoice))
+            if c and 0 < c.get("main_story", 0) < 5.0:
+                unlock_achievement("speedy", self)
         self.updateHeroDisplay(self.currentChoice)
         self.refreshStats()
         self.refreshTable()
@@ -2419,6 +2559,7 @@ class GamingDashboard(QMainWindow):
 
     def _onRouletteTick(self):
         self._rouletteTicks += 1
+        get_sound_manager().play("tick")
         if self.content:
             cand = random.choice(self.content)
             self.gameTitleLabel.setText(f"🎲 {formatDisplayName(cand)}...")
@@ -2652,6 +2793,8 @@ class GamingDashboard(QMainWindow):
     def onRevealMysteryGame(self):
         if self.isMysteryMode and not self.mysteryRevealed:
             self.mysteryRevealed = True
+            get_sound_manager().play("reveal")
+            unlock_achievement("mystery_solver", self)
             self.updateHeroDisplay(self.currentChoice)
 
     # -------------------------------------------------------------
@@ -2819,6 +2962,152 @@ class GamingDashboard(QMainWindow):
                 live_id = int(id_item.text())
                 self.liveHistoryMgr.deleteLive(live_id)
                 self.refreshLiveHistoryTable()
+
+    # -------------------------------------------------------------
+    # Ultimate Suite Handlers: SFX, Vibe, Challenges, Bingo, Chat Bot, Analytics, Backup
+    # -------------------------------------------------------------
+    def onToggleSound(self):
+        sm = get_sound_manager()
+        is_muted = sm.toggle_mute()
+        self.btnSound.setText("🔇" if is_muted else "🔊")
+        sm.play("click")
+
+    def onOpenCuratorPitch(self):
+        get_sound_manager().play("click")
+        pitch = generate_curator_pitch(self.currentChoice)
+        msg = QMessageBox(self)
+        msg.setWindowTitle(f"💡 Por que Jogar Hoje? - {pitch['title']}")
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setTextFormat(Qt.TextFormat.RichText)
+        msg.setText(f"""
+        <div style='font-family: Segoe UI, sans-serif;'>
+            <h2 style='color: #38bdf8; margin-bottom: 4px;'>{pitch['vibe_emoji']} {pitch['title']}</h2>
+            <p style='color: {pitch['vibe_color']}; font-weight: bold; font-size: 12px;'>
+                {pitch['vibe_name'].upper()} • {pitch['duration']}
+            </p>
+            <p style='font-size: 13px; color: #ffffff; margin-top: 10px;'>
+                <b>🎯 Por que vale a pena:</b><br>{pitch['hook']}
+            </p>
+            <p style='font-size: 12px; color: #cbd5e1; margin-top: 10px;'>
+                <i>{pitch['vibe_desc']}</i>
+            </p>
+            <div style='background-color: #1e293b; border-left: 3px solid #f59e0b; padding: 8px 12px; border-radius: 6px; margin-top: 12px;'>
+                <p style='color: #fbbf24; font-size: 12px; margin: 0;'>
+                    {pitch['streamer_tip']}
+                </p>
+            </div>
+        </div>
+        """)
+        msg.exec()
+
+    def onRollLiveChallenge(self):
+        ch = get_random_challenge()
+        set_active_challenge(ch)
+        get_sound_manager().play("reveal")
+        unlock_achievement("challenger", self)
+        self.challengeBanner.show()
+        self.challengeIconLbl.setText(ch["icon"])
+        self.challengeTitleLbl.setText(f"<b>{ch['title']}</b> ({ch['category']}): {ch['desc']}")
+
+    def onOpenLiveBingo(self):
+        get_sound_manager().play("click")
+        dlg = LiveBingoDialog(self)
+        dlg.exec()
+
+    def onBackupCurrentSave(self):
+        res = backup_game_saves(self.currentChoice)
+        get_sound_manager().play("achievement" if res["success"] else "click")
+        if res["success"]:
+            QMessageBox.information(
+                self, "Backup de Saves",
+                f"<b>Backup gerado com sucesso!</b><br><br>"
+                f"• Arquivos salvos: <b>{res['file_count']}</b><br>"
+                f"• Destino: <font color='#38bdf8'>{res['archive_path']}</font>"
+            )
+        else:
+            QMessageBox.warning(self, "Backup de Saves", res["message"])
+
+    def onToggleChatBot(self):
+        bot = get_chat_bot()
+        if bot.is_connected():
+            bot.stop_bot()
+            self.btnChatBot.setText("💬 Bot Twitch")
+            self.btnChatBot.setStyleSheet("""
+                QPushButton {
+                    background-color: #161a24;
+                    border: 1px solid #2b3244;
+                    border-radius: 6px;
+                    padding: 4px 10px;
+                    font-size: 11px;
+                    color: #cbd5e1;
+                }
+            """)
+            QMessageBox.information(self, "Bot de Chat", "Bot da Twitch desconectado.")
+            return
+
+        from PyQt6.QtWidgets import QInputDialog
+        def_channel = getattr(self.config, 'streamerTwitchChannel', '') or ''
+        if not def_channel:
+            yt_url = getattr(self.config, 'streamerYouTubeMainChannel', '')
+            def_channel = extractChannelHandle(yt_url).lstrip("@")
+
+        channel, ok = QInputDialog.getText(
+            self, "Conectar Bot da Twitch (Leitura de Votos)",
+            "Digite o canal da Twitch para computar votos automaticamente (!voto 1, !voto 2, !voto 3):\n(Não necessita de senha/token para votar)",
+            text=def_channel
+        )
+        if ok and channel.strip():
+            bot.vote_received.connect(self._on_bot_vote_received)
+            bot.status_changed.connect(self._on_bot_status_changed)
+            bot.start_bot(channel.strip())
+            self.btnChatBot.setText(f"🟢 #{channel.strip()[:8]}")
+            self.btnChatBot.setStyleSheet("""
+                QPushButton {
+                    background-color: #065f46;
+                    border: 1px solid #10b981;
+                    border-radius: 6px;
+                    padding: 4px 10px;
+                    font-size: 11px;
+                    font-weight: bold;
+                    color: #ffffff;
+                }
+            """)
+
+    def _on_bot_vote_received(self, option_idx: int, username: str):
+        if hasattr(self, 'chatVotes') and 0 <= option_idx < len(self.chatVotes):
+            self.chatVotes[option_idx] += 1
+            if hasattr(self, 'trioCards') and len(self.trioCards) > option_idx:
+                card = self.trioCards[option_idx]
+                if "lblVoteCount" in card:
+                    total = sum(self.chatVotes)
+                    pct = round((self.chatVotes[option_idx] / total * 100)) if total > 0 else 0
+                    card["lblVoteCount"].setText(f"{self.chatVotes[option_idx]} votos ({pct}%)")
+            get_sound_manager().play("click")
+            unlock_achievement("democracy", self)
+
+    def _on_bot_status_changed(self, connected: bool, msg: str):
+        if not connected and hasattr(self, 'btnChatBot'):
+            self.btnChatBot.setText("💬 Bot Twitch")
+            self.btnChatBot.setStyleSheet("""
+                QPushButton {
+                    background-color: #161a24;
+                    border: 1px solid #2b3244;
+                    border-radius: 6px;
+                    padding: 4px 10px;
+                    font-size: 11px;
+                    color: #cbd5e1;
+                }
+            """)
+
+    def onOpenAnalytics(self):
+        get_sound_manager().play("click")
+        dlg = AnalyticsDialog(self.content, self)
+        dlg.exec()
+
+    def onOpenAchievements(self):
+        get_sound_manager().play("click")
+        dlg = AchievementsDialog(self)
+        dlg.exec()
 
 def showDashboard(choosedGame, steamOwnedGames, content, config):
     """Entry point to start the PyQt6 Gaming Dashboard."""

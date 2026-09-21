@@ -28,6 +28,12 @@ _OVERLAY_STATE = {
     "timer_text": "00:00:00",
     "is_playing": False,
     "channel_handle": "@ChooseRandomGame",
+    "challenge": {
+        "active": False,
+        "title": "",
+        "desc": "",
+        "icon": "🎯"
+    },
     "poll": {
         "active": False,
         "question": "Qual jogo devemos jogar a seguir?",
@@ -73,6 +79,15 @@ def update_overlay_timer(timer_str: str, is_playing: bool = True):
 def update_overlay_channel(channel_handle: str):
     """Updates the channel name/handle shown on the overlay."""
     _OVERLAY_STATE["channel_handle"] = channel_handle or "@ChooseRandomGame"
+
+def update_overlay_challenge(title: str = "", desc: str = "", icon: str = "🎯"):
+    """Updates the active live challenge shown on the OBS overlay."""
+    _OVERLAY_STATE["challenge"] = {
+        "active": bool(title),
+        "title": title,
+        "desc": desc,
+        "icon": icon or "🎯"
+    }
 
 def update_overlay_poll(*args, **kwargs):
     """
@@ -286,6 +301,9 @@ OVERLAY_HTML = """<!DOCTYPE html>
                 <span class="hltb-badge" id="hltbBadge">⏱️ ~15h</span>
             </div>
             <div class="game-title" id="gameTitle">Carregando jogo...</div>
+            <div class="challenge-row" id="challengeRow" style="display: none; font-size: 11px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; border-radius: 6px; padding: 3px 8px; font-weight: bold; margin-top: 2px;">
+                <span id="challengeIcon">🎯</span> <span id="challengeTitle">Desafio</span>
+            </div>
             <div class="footer-row">
                 <span class="channel-name" id="channelName">📺 Live Stream</span>
                 <span class="timer-badge" id="timerBadge">⏱️ 00:00:00</span>
@@ -316,6 +334,15 @@ OVERLAY_HTML = """<!DOCTYPE html>
                     hltbBadge.style.display = 'inline-block';
                 } else {
                     hltbBadge.style.display = 'none';
+                }
+
+                const chRow = document.getElementById('challengeRow');
+                if (data.challenge && data.challenge.active) {
+                    chRow.style.display = 'block';
+                    document.getElementById('challengeIcon').textContent = data.challenge.icon || '🎯';
+                    document.getElementById('challengeTitle').textContent = 'Desafio: ' + data.challenge.title;
+                } else {
+                    chRow.style.display = 'none';
                 }
 
                 const img = document.getElementById('gameCover');
@@ -482,8 +509,124 @@ POLL_HTML = """<!DOCTYPE html>
 </html>
 """
 
+BINGO_HTML = """<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>OBS Studio Live Backlog Bingo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: transparent;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            width: 100vw;
+        }
+        .bingo-card {
+            background: rgba(13, 15, 20, 0.90);
+            backdrop-filter: blur(14px);
+            border: 2px solid rgba(56, 189, 248, 0.4);
+            border-radius: 16px;
+            padding: 16px;
+            width: 380px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+        }
+        .bingo-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .bingo-title {
+            font-size: 13px;
+            font-weight: 800;
+            color: #38bdf8;
+            letter-spacing: 1px;
+        }
+        .bingo-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+        .cell {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 8px 6px;
+            font-size: 10px;
+            font-weight: 600;
+            color: #cbd5e1;
+            text-align: center;
+            height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+        .cell.marked {
+            background: linear-gradient(135deg, #059669, #10b981);
+            border-color: #34d399;
+            color: #ffffff;
+            font-weight: 800;
+            transform: scale(0.97);
+            box-shadow: 0 0 12px rgba(52, 211, 153, 0.4);
+        }
+        .winner-banner {
+            display: none;
+            text-align: center;
+            margin-top: 10px;
+            font-size: 12px;
+            font-weight: 800;
+            color: #fbbf24;
+            letter-spacing: 1px;
+            animation: pulse 1s infinite alternate;
+        }
+        @keyframes pulse { from { opacity: 0.7; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="bingo-card" id="bingoCard">
+        <div class="bingo-header">
+            <span class="bingo-title">🎯 BINGO DO BACKLOG</span>
+            <span style="font-size: 10px; color: #94a3b8;">AO VIVO</span>
+        </div>
+        <div class="bingo-grid" id="gridContainer"></div>
+        <div class="winner-banner" id="winnerBanner">🎉 BINGO COMPLETO! LINHA FEITA!</div>
+    </div>
+    <script>
+        async function updateBingo() {
+            try {
+                const res = await fetch('/api/bingo');
+                if (!res.ok) return;
+                const data = await res.json();
+                const container = document.getElementById('gridContainer');
+                container.innerHTML = '';
+                (data.cells || []).forEach(c => {
+                    const el = document.createElement('div');
+                    el.className = 'cell' + (c.marked ? ' marked' : '');
+                    el.textContent = (c.marked ? '✔ ' : '') + c.text;
+                    container.appendChild(el);
+                });
+                document.getElementById('winnerBanner').style.display = data.has_won ? 'block' : 'none';
+            } catch (e) {
+                console.warn(e);
+            }
+        }
+        setInterval(updateBingo, 1500);
+        updateBingo();
+    </script>
+</body>
+</html>
+"""
+
 class OverlayHTTPHandler(BaseHTTPRequestHandler):
-    """Handles HTTP requests for the OBS overlay and API."""
+    """Handles HTTP requests for the OBS overlay, Bingo widget and API."""
 
     def log_message(self, format, *args):
         # Suppress noisy HTTP request logging in terminal
@@ -507,12 +650,27 @@ class OverlayHTTPHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(POLL_HTML.encode("utf-8"))
 
+        elif path == "/bingo" or path == "/overlay/bingo":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(BINGO_HTML.encode("utf-8"))
+
         elif path == "/api/current":
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps(_OVERLAY_STATE).encode("utf-8"))
+
+        elif path == "/api/bingo":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            from aesgard.bingo import get_bingo_state
+            self.wfile.write(json.dumps(get_bingo_state().to_dict()).encode("utf-8"))
 
         elif path == "/api/vote":
             params = parse_qs(parsed.query)
