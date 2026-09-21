@@ -1585,10 +1585,39 @@ class GamingDashboard(QMainWindow):
         elif "Locais" in filter_mode:
             filtered_content = [g for g in self.content if not g.startswith(linkPrefix) and not g.startswith(exodosPrefix) and not g.startswith(PLAYNITE_PREFIX)]
         elif "Playnite" in filter_mode:
-            filtered_content = [g for g in self.content if g.startswith(PLAYNITE_PREFIX)]
+            filtered_content = [
+                g for g in self.content 
+                if g.startswith(PLAYNITE_PREFIX) or g.startswith("steam:") or g.startswith("gog:") or "steam" in g.lower() or "gog" in g.lower() or "epic" in g.lower()
+            ]
+            if not filtered_content:
+                # Fallback: tentar carregar jogos do Playnite sob demanda
+                try:
+                    from aesgard.playnite import loadPlayniteGames, formatPlayniteEntries
+                    pn_path = getattr(self.config, 'playnitePath', '')
+                    pn_games = loadPlayniteGames(pn_path, onlyInstalled=True)
+                    if pn_games:
+                        pn_entries = formatPlayniteEntries(pn_games)
+                        for entry in pn_entries:
+                            if entry not in self.content:
+                                self.content.append(entry)
+                        filtered_content = pn_entries
+                        logger.info(f"Carregados {len(pn_entries)} jogos do Playnite sob demanda.")
+                except Exception as e:
+                    logger.warning(f"Erro ao carregar jogos do Playnite sob demanda: {e}")
 
         if not filtered_content:
-            QMessageBox.information(self, "Aviso", f"Nenhum jogo encontrado para a categoria: {filter_mode}")
+            QMessageBox.information(
+                self, 
+                "Aviso", 
+                f"Nenhum jogo encontrado para a categoria: {filter_mode}.\n\n"
+                "Alternando para 'Todas as Fontes' para continuar o sorteio."
+            )
+            self.comboRerollFilter.blockSignals(True)
+            self.comboRerollFilter.setCurrentIndex(0)
+            self.comboRerollFilter.blockSignals(False)
+            filtered_content = self.content
+
+        if not filtered_content:
             return
 
         def do_pick():

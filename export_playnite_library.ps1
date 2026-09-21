@@ -27,20 +27,11 @@ if (-not (Test-Path $dllPath)) {
 
 Write-Host "Carregando biblioteca do Playnite..." -ForegroundColor Cyan
 
-# Copia temporaria para contornar lock se o Playnite estiver em execucao
-$tempDb = Join-Path $env:TEMP "playnite_games_export_temp.db"
-try {
-    # Tenta copiar direto ou com modo compartilhado
-    Copy-Item -Path $dbPath -Destination $tempDb -Force -ErrorAction Stop
-} catch {
-    Write-Warning "O Playnite esta com o banco aberto exclusivamente. Feche o Playnite momentaneamente para sincronizar, ou aguarde o encerramento."
-    exit 1
-}
-
 try {
     Add-Type -Path $dllPath
-    $db = New-Object LiteDB.LiteDatabase($tempDb)
-    $col = $db.GetCollection("games")
+    $connStr = "Filename=$dbPath;ReadOnly=true"
+    $db = New-Object LiteDB.LiteDatabase($connStr)
+    $col = $db.GetCollection("Game")
     $allGames = $col.FindAll()
 
     $exportList = @()
@@ -65,8 +56,7 @@ try {
     $db.Dispose()
     $exportList | ConvertTo-Json -Depth 3 | Set-Content -Path $OutputFile -Encoding UTF8
     Write-Host "Sucesso! Foram exportados $($exportList.Count) jogos para $OutputFile" -ForegroundColor Green
-} finally {
-    if (Test-Path $tempDb) {
-        Remove-Item $tempDb -Force -ErrorAction SilentlyContinue
-    }
+} catch {
+    Write-Error "Erro ao exportar jogos do Playnite: $_"
 }
+

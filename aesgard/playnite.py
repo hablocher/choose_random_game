@@ -54,7 +54,7 @@ def loadPlayniteGames(playnitePath, onlyInstalled=True, exportJsonPath=None):
     for json_file in potential_json_paths:
         if json_file and os.path.exists(json_file):
             try:
-                with open(json_file, "r", encoding="utf-8") as f:
+                with open(json_file, "r", encoding="utf-8-sig") as f:
                     data = json.load(f)
                     for item in data:
                         is_installed = item.get("IsInstalled", item.get("is_installed", True))
@@ -67,11 +67,46 @@ def loadPlayniteGames(playnitePath, onlyInstalled=True, exportJsonPath=None):
                             "icon": item.get("Icon", item.get("icon", "")),
                             "is_installed": is_installed,
                         })
-                    logger.info(f"Loaded {len(games)} games from Playnite export: {json_file}")
-                    loaded_from_json = True
-                    break
+                    if games:
+                        logger.info(f"Loaded {len(games)} games from Playnite export: {json_file}")
+                        loaded_from_json = True
+                        break
             except Exception as e:
                 logger.warning(f"Error reading Playnite JSON export ({json_file}): {e}")
+
+    # 2. If no games loaded, attempt auto-export from Playnite LiteDB
+    if not games and playnitePath:
+        db_path = os.path.join(playnitePath, "library", "games.db")
+        dll_path = os.path.join(playnitePath, "LiteDB.dll")
+        script_path = os.path.join(project_dir, "export_playnite_library.ps1")
+        if os.path.exists(db_path) and os.path.exists(dll_path) and os.path.exists(script_path):
+            try:
+                import subprocess
+                target_json = os.path.join(project_dir, "playnite_games.json")
+                logger.info(f"Triggering automatic Playnite library export via {script_path}...")
+                cmd = [
+                    "powershell", "-ExecutionPolicy", "Bypass", "-File", script_path,
+                    "-PlaynitePath", playnitePath,
+                    "-OutputFile", target_json
+                ]
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+                if os.path.exists(target_json):
+                    with open(target_json, "r", encoding="utf-8-sig") as f:
+                        data = json.load(f)
+                        for item in data:
+                            is_installed = item.get("IsInstalled", item.get("is_installed", True))
+                            if onlyInstalled and not is_installed:
+                                continue
+                            games.append({
+                                "id": item.get("Id", item.get("id", "")),
+                                "name": item.get("Name", item.get("name", "Unknown")),
+                                "cover": item.get("CoverImage", item.get("cover", "")),
+                                "icon": item.get("Icon", item.get("icon", "")),
+                                "is_installed": is_installed,
+                            })
+                        logger.info(f"Auto-export loaded {len(games)} installed games from Playnite.")
+            except Exception as se:
+                logger.warning(f"Auto-export from Playnite LiteDB failed: {se}")
 
     return games
 
