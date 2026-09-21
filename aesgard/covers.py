@@ -29,11 +29,12 @@ _PLAYNITE_TITLE_MAP = None
 
 def getCleanGameTitle(gameEntry: str) -> str:
     """Extracts a clean, searchable game title from any game entry."""
-    # Playnite: playnite:Source:Name:Id
+    # Playnite: playnite:Game Name:GameId
     if gameEntry.startswith(PLAYNITE_PREFIX):
-        parts = gameEntry.split(":")
-        if len(parts) >= 3:
-            return formatDisplayName(parts[2])
+        payload = gameEntry[len(PLAYNITE_PREFIX):]
+        parts = payload.rsplit(":", 1)
+        name = parts[0] if len(parts) == 2 else payload
+        return name.strip()
     
     # Raw name
     name = formatDisplayName(gameEntry)

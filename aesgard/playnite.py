@@ -135,11 +135,47 @@ def launchPlayniteGame(gameId, uriPrefix="playnite://playnite/start/"):
             logger.error(f"Fallback launch failed: {we}")
             return False
 
-def getPlayniteCoverPath(playnitePath, coverImageId, libraryFilesDir="library/files"):
-    """Finds the cover or icon image path in Playnite's library files directory."""
-    if not playnitePath or not coverImageId:
+def getPlayniteCoverPath(playnitePath, coverImageOrGameId, libraryFilesDir="library/files"):
+    """
+    Finds the cover image path in Playnite's library files directory.
+    Supports:
+    - Direct relative path: 'guid/image.jpg'
+    - Game ID directory: '00054f73-755c-41a4-81b5-a5e4d2e189ca' (inspects directory for portrait cover)
+    - Image GUID directly
+    """
+    if not playnitePath or not coverImageOrGameId:
         return None
-    file_path = os.path.join(playnitePath, libraryFilesDir.replace("/", os.sep), coverImageId)
-    if os.path.exists(file_path):
-        return file_path
+
+    base_dir = os.path.join(playnitePath, libraryFilesDir.replace("/", os.sep))
+    direct_path = os.path.join(base_dir, coverImageOrGameId)
+
+    # 1. Direct file match
+    if os.path.isfile(direct_path):
+        return direct_path
+
+    # 2. Game folder match: inspect images inside and prioritize portrait cover art
+    if os.path.isdir(direct_path):
+        try:
+            from PIL import Image as PilImage
+            candidates = []
+            for f in os.listdir(direct_path):
+                f_lower = f.lower()
+                if f_lower.endswith(('.jpg', '.jpeg', '.png', '.webp')):
+                    full_f = os.path.join(direct_path, f)
+                    try:
+                        with PilImage.open(full_f) as im:
+                            w, h = im.size
+                            is_portrait = (h >= w)
+                            candidates.append((is_portrait, h * w, full_f))
+                    except Exception:
+                        candidates.append((False, 0, full_f))
+            
+            if candidates:
+                # Sort: prioritize portrait covers, then highest resolution
+                candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+                return candidates[0][2]
+        except Exception as e:
+            logger.debug(f"Error resolving cover from Playnite folder {direct_path}: {e}")
+
     return None
+
