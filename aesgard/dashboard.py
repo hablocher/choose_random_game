@@ -3010,9 +3010,13 @@ class GamingDashboard(QMainWindow):
         self.challengeTitleLbl.setText(f"<b>{ch['title']}</b> ({ch['category']}): {ch['desc']}")
 
     def onOpenLiveBingo(self):
-        get_sound_manager().play("click")
-        dlg = LiveBingoDialog(self)
-        dlg.exec()
+        try:
+            get_sound_manager().play("click")
+            dlg = LiveBingoDialog(self)
+            dlg.exec()
+        except Exception as e:
+            logger.error(f"Erro ao abrir Bingo da Live: {e}", exc_info=True)
+            QMessageBox.warning(self, "Bingo da Live", f"Não foi possível abrir o Bingo:\n{e}")
 
     def onBackupCurrentSave(self):
         res = backup_game_saves(self.currentChoice)

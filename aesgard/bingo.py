@@ -179,9 +179,20 @@ class LiveBingoDialog(QDialog):
         for i in range(9):
             btn = QPushButton()
             btn.setFixedHeight(110)
-            btn.setWordWrap(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setProperty("cell_index", i)
+
+            btn_layout = QVBoxLayout(btn)
+            btn_layout.setContentsMargins(6, 6, 6, 6)
+            btn_layout.setSpacing(2)
+
+            lbl = QLabel()
+            lbl.setWordWrap(True)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            btn_layout.addWidget(lbl)
+            btn._label = lbl
+
             btn.clicked.connect(lambda _, idx=i: self.onCellClicked(idx))
             self.buttons.append(btn)
             row, col = divmod(i, 3)
@@ -199,14 +210,21 @@ class LiveBingoDialog(QDialog):
 
     def onCellClicked(self, index: int):
         self.state.toggle_cell(index)
-        from aesgard.sound import get_sound_manager
-        get_sound_manager().play("click")
+        try:
+            from aesgard.sound import get_sound_manager
+            get_sound_manager().play("click")
+        except Exception:
+            pass
 
         is_bingo = self.state.check_bingo()
         self.update_buttons_ui()
 
         if is_bingo:
-            get_sound_manager().play("victory")
+            try:
+                from aesgard.sound import get_sound_manager
+                get_sound_manager().play("victory")
+            except Exception:
+                pass
             self.statusLabel.setText("🎉 BINGO COMPLETO! Linha completada com sucesso!")
             self.statusLabel.setStyleSheet("color: #10b981; font-size: 13px; font-weight: bold;")
             
@@ -228,32 +246,28 @@ class LiveBingoDialog(QDialog):
             text = self.state.cells[i]
             is_marked = self.state.is_cell_marked(i)
             if is_marked:
-                btn.setText(f"✔\n{text}")
+                btn._label.setText(f"✔\n{text}")
+                btn._label.setStyleSheet("color: #ffffff; font-weight: bold; font-size: 11px; background: transparent; border: none;")
                 btn.setStyleSheet("""
                     QPushButton {
                         background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #059669, stop:1 #10b981);
-                        color: #ffffff;
                         border: 2px solid #34d399;
                         border-radius: 8px;
-                        font-weight: bold;
-                        font-size: 11px;
-                        padding: 6px;
+                        padding: 2px;
                     }
                 """)
             else:
-                btn.setText(text)
+                btn._label.setText(text)
+                btn._label.setStyleSheet("color: #cbd5e1; font-weight: normal; font-size: 11px; background: transparent; border: none;")
                 btn.setStyleSheet("""
                     QPushButton {
                         background-color: #1f2937;
-                        color: #cbd5e1;
                         border: 1px solid #374151;
                         border-radius: 8px;
-                        font-size: 11px;
-                        padding: 6px;
+                        padding: 2px;
                     }
                     QPushButton:hover {
                         background-color: #374151;
                         border-color: #60a5fa;
-                        color: #ffffff;
                     }
                 """)
