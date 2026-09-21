@@ -1841,9 +1841,9 @@ class GamingDashboard(QMainWindow):
 
         # Resolve Cover Art
         try:
-            # Always query by canonical GOTY title to guarantee exact cover match
+            lookup_target = goty.get('library_entry') if goty.get('is_installed') and goty.get('library_entry') else goty['title']
             pilImg = findGameIcon(
-                goty['title'],
+                lookup_target,
                 playnitePath=getattr(self.config, 'playnitePath', '')
             )
             pilImg = pilImg.convert("RGBA")
