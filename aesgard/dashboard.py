@@ -1137,36 +1137,56 @@ class GamingDashboard(QMainWindow):
         self.trioContainer.setSpacing(16)
         self.trioCards = []
 
-        labels = [("OPÇÃO A", "#00cec9"), ("OPÇÃO B", "#fdcb6e"), ("OPÇÃO C", "#e17055")]
-        for i, (opt_name, color) in enumerate(labels):
+        labels = [
+            ("OPÇÃO A", "#00cec9", "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00b894, stop:1 #00cec9)", "#0d0f14"),
+            ("OPÇÃO B", "#fdcb6e", "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e67e22, stop:1 #fdcb6e)", "#0d0f14"),
+            ("OPÇÃO C", "#e17055", "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #d63031, stop:1 #e17055)", "#ffffff")
+        ]
+        for i, (opt_name, color, btn_gradient, btn_text_color) in enumerate(labels):
             card = QFrame()
-            card.setStyleSheet(f"background-color: #12151d; border: 2px solid {color}; border-radius: 14px; padding: 14px;")
+            card.setObjectName(f"TrioCard_{i}")
+            card.setStyleSheet(f"""
+                QFrame#TrioCard_{i} {{
+                    background-color: #12151d;
+                    border: 2px solid {color};
+                    border-radius: 14px;
+                    padding: 14px;
+                }}
+            """)
             cLayout = QVBoxLayout(card)
             cLayout.setSpacing(10)
 
             # Option Badge
             optBadge = QLabel(opt_name)
             optBadge.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-            optBadge.setStyleSheet(f"background-color: {color}; color: #0d0f14; border-radius: 6px; padding: 4px 12px; font-weight: bold;")
+            optBadge.setStyleSheet(f"background-color: {color}; color: #0d0f14; border-radius: 6px; padding: 4px 12px; font-weight: bold; border: none;")
             optBadge.setAlignment(Qt.AlignmentFlag.AlignCenter)
             cLayout.addWidget(optBadge)
 
             # Cover Box
             imgFrame = QFrame()
-            imgFrame.setStyleSheet("background-color: #0d0f14; border: 1px solid #242b3b; border-radius: 10px;")
+            imgFrame.setObjectName(f"TrioImgFrame_{i}")
+            imgFrame.setStyleSheet(f"""
+                QFrame#TrioImgFrame_{i} {{
+                    background-color: #0d0f14;
+                    border: 1px solid #242b3b;
+                    border-radius: 10px;
+                }}
+            """)
             imgLayout = QVBoxLayout(imgFrame)
             imgLayout.setContentsMargins(6, 6, 6, 6)
 
             coverLabel = QLabel()
             coverLabel.setFixedSize(160, 160)
             coverLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            coverLabel.setStyleSheet("border: none; background: transparent;")
             imgLayout.addWidget(coverLabel, 0, Qt.AlignmentFlag.AlignCenter)
             cLayout.addWidget(imgFrame, 0, Qt.AlignmentFlag.AlignCenter)
 
             # Title
             titleLabel = QLabel("Aguardando sorteio...")
-            titleLabel.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-            titleLabel.setStyleSheet("color: #ffffff;")
+            titleLabel.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+            titleLabel.setStyleSheet("color: #ffffff; background: transparent; border: none;")
             titleLabel.setWordWrap(True)
             titleLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
             cLayout.addWidget(titleLabel)
@@ -1174,7 +1194,7 @@ class GamingDashboard(QMainWindow):
             # Platform & Stats
             metaLabel = QLabel("Pronto para rodar")
             metaLabel.setFont(QFont("Segoe UI", 11))
-            metaLabel.setStyleSheet("color: #a0aec0;")
+            metaLabel.setStyleSheet("color: #a0aec0; background: transparent; border: none;")
             metaLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
             cLayout.addWidget(metaLabel)
 
@@ -1182,15 +1202,50 @@ class GamingDashboard(QMainWindow):
 
             # Play Button (Winner)
             btnPlayOpt = QPushButton(f"▶ JOGAR {opt_name} (Vencedor)")
-            btnPlayOpt.setObjectName("BtnPlay")
             btnPlayOpt.setCursor(Qt.CursorShape.PointingHandCursor)
+            btnPlayOpt.setStyleSheet(f"""
+                QPushButton {{
+                    background: {btn_gradient};
+                    color: {btn_text_color};
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    font-size: 13px;
+                    font-weight: bold;
+                    border: none;
+                    border-radius: 8px;
+                    padding: 12px 16px;
+                }}
+                QPushButton:hover {{
+                    background: {color};
+                    color: {btn_text_color};
+                }}
+                QPushButton:pressed {{
+                    background-color: #2d3436;
+                    color: #ffffff;
+                }}
+            """)
             btnPlayOpt.clicked.connect(lambda _, idx=i: self.onPlayChatChoice(idx))
             cLayout.addWidget(btnPlayOpt)
 
             # Intel Button
             btnIntelOpt = QPushButton("ℹ️ Guia & Dicas")
-            btnIntelOpt.setObjectName("BtnSecondary")
             btnIntelOpt.setCursor(Qt.CursorShape.PointingHandCursor)
+            btnIntelOpt.setStyleSheet("""
+                QPushButton {
+                    background-color: #1a202c;
+                    border: 1px solid #334155;
+                    color: #e2e8f0;
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    font-size: 12px;
+                    font-weight: 600;
+                    border-radius: 6px;
+                    padding: 8px 14px;
+                }
+                QPushButton:hover {
+                    background-color: #273449;
+                    border-color: #64748b;
+                    color: #ffffff;
+                }
+            """)
             btnIntelOpt.clicked.connect(lambda _, idx=i: self.onOpenChatChoiceIntel(idx))
             cLayout.addWidget(btnIntelOpt)
 
