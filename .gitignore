@@ -128,10 +128,22 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Local Config & Databases
 /choose_random_game.ini
 *.db
+*.db3
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite3-journal
+Games*.db
+AesgardGames
+
+# IDEs, caches & temporary test files
 .vs/
 covers_cache/
 scratch/
-AesgardGames
+
 
