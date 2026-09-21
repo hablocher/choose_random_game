@@ -39,8 +39,9 @@ def run(argv):
         LogException("Error initializing database!", e)
         return
         
-    # 2. Query Playnite Library (Unifies Steam, GOG, Epic, etc.)
+    # 2. Query Playnite Library (Unifies Steam, GOG, Epic, Emulators, etc.)
     playniteEntries = []
+    playniteEntriesWithStatus = []
     if getattr(config, 'playniteEnabled', True):
         try:
             playnite_path = config.playnitePath or getDefaultPlaynitePath()
@@ -49,8 +50,9 @@ def run(argv):
                 onlyInstalled=config.playniteOnlyInstalled,
                 exportJsonPath=config.playniteExportJson
             )
-            playniteEntries = formatPlayniteEntries(playnite_games)
-            logger.info(f"Loaded {len(playniteEntries)} installed games from Playnite.")
+            playniteEntriesWithStatus = formatPlayniteEntries(playnite_games, includeInstalledFlag=True)
+            playniteEntries = [entry for entry, _ in playniteEntriesWithStatus]
+            logger.info(f"Loaded {len(playniteEntries)} games from Playnite (onlyInstalled={config.playniteOnlyInstalled}).")
         except Exception as e:
             logger.warning(f"Error loading Playnite games: {e}")
 
@@ -85,9 +87,17 @@ def run(argv):
     if config.createFiles:
         writeListToFile(config.pathToSave + config.gamesFoundFileName, content)
         
-    # 6. Batch import games to database
+    # 6. Batch import games to database with accurate installation status
     if config.importContentToDatabase:
-        importContentToDatabase(content)
+        if playniteEntriesWithStatus:
+            import_items = list(playniteEntriesWithStatus)
+            known_playnite = {entry for entry, _ in playniteEntriesWithStatus}
+            for c in content:
+                if c not in known_playnite:
+                    import_items.append((c, 1))
+            importContentToDatabase(import_items)
+        else:
+            importContentToDatabase(content)
 
     # 7. Initial random selection
     choosedGame = chooseGame(content, sampleSize=config.randomSampleSize)

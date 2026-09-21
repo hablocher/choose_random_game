@@ -597,7 +597,7 @@ def scanAllSources(config=None, includeUninstalled=True):
     results = []
 
     # 1. Playnite Catalog
-    if getattr(cfg, 'enablePlaynite', True):
+    if getattr(cfg, 'playniteEnabled', getattr(cfg, 'enablePlaynite', True)):
         try:
             from aesgard.playnite import loadPlayniteGames, formatPlayniteEntries
             playnite_path = getattr(cfg, 'playnitePath', None) or getattr(cfg, 'playniteDatabasePath', None)
