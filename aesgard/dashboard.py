@@ -1731,50 +1731,56 @@ class GamingDashboard(QMainWindow):
         # HowLongToBeat Integration (Zero-freeze: instant cache + async background worker)
         overlay_hltb = "--"
         def _apply_hltb_ui(data):
-            if data and data.get("main_story", 0) > 0:
-                hours = data.get("main_story", 0)
-                dur_str = format_hltb_duration(hours)
-                self.hltbBadge.setText(dur_str)
-                self.hltbBadge.setStyleSheet(get_duration_badge_style(hours))
-                self.hltbBadge.setToolTip(
-                    f"Campanha Principal: {hours:.1f}h\n"
-                    f"História + Extras: {data.get('main_extra', 0):.1f}h\n"
-                    f"Complecionista (100%): {data.get('completionist', 0):.1f}h"
-                )
-                update_overlay_game(display_name, platform, f"~{hours:.1f}h")
-            else:
-                self.hltbBadge.setText("⏱️ HLTB: --")
-                self.hltbBadge.setStyleSheet("background-color: #334155; color: #94a3b8; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;")
-                self.hltbBadge.setToolTip("Tempo não catalogado no HowLongToBeat")
-                update_overlay_game(display_name, platform, "--")
+            if data:
+                hours = data.get("main_story", 0.0) or data.get("main_extra", 0.0) or data.get("completionist", 0.0)
+                if hours and hours > 0:
+                    dur_str = format_hltb_duration(hours)
+                    self.hltbBadge.setText(dur_str)
+                    self.hltbBadge.setStyleSheet(get_duration_badge_style(hours))
+                    self.hltbBadge.setToolTip(
+                        f"Campanha Principal: {data.get('main_story', 0):.1f}h\n"
+                        f"História + Extras: {data.get('main_extra', 0):.1f}h\n"
+                        f"Complecionista (100%): {data.get('completionist', 0):.1f}h"
+                    )
+                    update_overlay_game(display_name, platform, f"~{hours:.1f}h")
+                    return
+            self.hltbBadge.setText("⏱️ HLTB: --")
+            self.hltbBadge.setStyleSheet("background-color: #334155; color: #94a3b8; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;")
+            self.hltbBadge.setToolTip("Tempo não catalogado no HowLongToBeat")
+            update_overlay_game(display_name, platform, "--")
 
         try:
             hltb_info = get_cached_hltb(display_name)
             if hltb_info is not None:
                 _apply_hltb_ui(hltb_info)
-                if hltb_info.get("main_story", 0) > 0:
-                    overlay_hltb = f"~{hltb_info.get('main_story', 0):.1f}h"
+                hours = hltb_info.get('main_story', 0) or hltb_info.get('main_extra', 0) or hltb_info.get('completionist', 0)
+                if hours > 0:
+                    overlay_hltb = f"~{hours:.1f}h"
             else:
-                # Fast asynchronous background fetch - never freeze GUI thread
+                # Fast asynchronous background fetch - strictly timed out, never gets stuck
                 self.hltbBadge.setText("⏱️ HLTB: ...")
                 self.hltbBadge.setStyleSheet("background-color: #1e293b; color: #38bdf8; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;")
                 self.hltbBadge.setToolTip("Consultando estimativa no HowLongToBeat em segundo plano...")
                 overlay_hltb = "--"
 
                 def _fetch_bg(target_entry, target_name):
+                    res = None
                     try:
-                        res = fetch_hltb_data(target_name)
+                        res = fetch_hltb_data(target_name, timeout=5.0)
+                    except Exception as ex:
+                        logger.debug(f"Async HLTB error: {ex}")
+                        res = None
+                    finally:
                         def _update_if_current():
                             if getattr(self, 'currentChoice', None) == target_entry:
                                 _apply_hltb_ui(res)
                         QTimer.singleShot(0, _update_if_current)
-                    except Exception as ex:
-                        logger.debug(f"Async HLTB error: {ex}")
 
                 import threading
                 threading.Thread(target=_fetch_bg, args=(gameEntry, display_name), daemon=True).start()
         except Exception as e:
             logger.debug(f"Erro ao obter badge HLTB: {e}")
+            _apply_hltb_ui(None)
             overlay_hltb = "--"
 
         info = findGameInfo(gameEntry)

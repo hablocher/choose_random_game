@@ -310,10 +310,11 @@ def get_all_cached_durations() -> Dict[str, float]:
     return {k: v.get("main_story", 0.0) for k, v in _HLTB_MEMORY_CACHE.items()}
 
 
-def fetch_hltb_data(title: str, max_retries: int = 1) -> Optional[Dict]:
+def fetch_hltb_data(title: str, timeout: float = 5.0) -> Optional[Dict]:
     """
     Queries HowLongToBeat and caches the result locally in SQLite and memory.
-    Designed to be called in background threads to avoid blocking Qt.
+    Strictly times out in `timeout` seconds to prevent thread starvation.
+    Always records negative or failed matches in memory cache to avoid hammering HLTB.
     Returns dict: {'game_name': str, 'main_story': float, 'main_extra': float, 'completionist': float, 'url': str}
     """
     cached = get_cached_hltb(title)
@@ -324,14 +325,19 @@ def fetch_hltb_data(title: str, max_retries: int = 1) -> Optional[Dict]:
     if not clean or len(clean) < 2:
         return None
 
-    data = None
-    try:
+    def _execute_search():
         from howlongtobeatpy import HowLongToBeat
         hltb = HowLongToBeat()
         results = hltb.search(clean)
         if not results and ":" in clean:
-            # Try searching just the main prefix before the colon
             results = hltb.search(clean.split(":")[0].strip())
+        return results
+
+    try:
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_execute_search)
+            results = future.result(timeout=timeout)
 
         if results:
             best = results[0]
@@ -353,23 +359,33 @@ def fetch_hltb_data(title: str, max_retries: int = 1) -> Optional[Dict]:
             }
 
         # Save to SQLite cache
-        db_path = _get_db_path()
-        conn = sqlite3.connect(db_path)
-        cur = conn.cursor()
-        cur.execute("""
-            INSERT OR REPLACE INTO HltbCache (clean_title, game_name, main_story, main_extra, completionist, hltb_url, fetched_at)
-            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        """, (clean.lower(), data["game_name"], data["main_story"], data["main_extra"], data["completionist"], data["url"]))
-        conn.commit()
-        conn.close()
+        try:
+            db_path = _get_db_path()
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT OR REPLACE INTO HltbCache (clean_title, game_name, main_story, main_extra, completionist, hltb_url, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, (clean.lower(), data["game_name"], data["main_story"], data["main_extra"], data["completionist"], data["url"]))
+            conn.commit()
+            conn.close()
+        except Exception as dbe:
+            logger.debug(f"DB cache error for {clean}: {dbe}")
 
         # Update in-memory cache
         _HLTB_MEMORY_CACHE[clean.lower()] = data
         return data
 
+    except concurrent.futures.TimeoutError:
+        logger.warning(f"HLTB query timed out after {timeout}s for '{clean}'")
+        fallback_data = {"game_name": clean, "main_story": 0.0, "main_extra": 0.0, "completionist": 0.0, "url": ""}
+        _HLTB_MEMORY_CACHE[clean.lower()] = fallback_data
+        return fallback_data
     except Exception as e:
         logger.warning(f"Error fetching HLTB data for '{clean}': {e}")
-        return None
+        fallback_data = {"game_name": clean, "main_story": 0.0, "main_extra": 0.0, "completionist": 0.0, "url": ""}
+        _HLTB_MEMORY_CACHE[clean.lower()] = fallback_data
+        return fallback_data
 
 
 def format_hltb_duration(hours: float) -> str:
