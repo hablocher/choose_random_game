@@ -63,9 +63,9 @@ class GameChooserUI:
         self.config = config
         
         self.root = Tk()
-        self.root.title("Choose Random Game")
+        self.root.title("Canino Gaming")
         self.root.resizable(False, False)
-        self.root.configure(bg="#1e1e24")
+        self.root.configure(bg="#070d14")
 
         # Variables
         self.titleVar = StringVar()
@@ -86,10 +86,10 @@ class GameChooserUI:
 
     def createWidgets(self):
         # Image Frame
-        self.frameImage = Frame(self.root, bg="#2d3436", relief=SUNKEN, bd=2)
+        self.frameImage = Frame(self.root, bg="#0f1b2b", relief=SUNKEN, bd=2)
         self.frameImage.pack(side=TOP, pady=(15, 10))
 
-        self.imageLabel = Label(self.frameImage, bg="#2d3436")
+        self.imageLabel = Label(self.frameImage, bg="#0f1b2b")
         self.imageLabel.pack()
 
         # Title
@@ -97,8 +97,8 @@ class GameChooserUI:
             self.root, 
             textvariable=self.titleVar, 
             font=("Segoe UI", 12, "bold"), 
-            bg="#1e1e24", 
-            fg="#f5f6fa",
+            bg="#070d14", 
+            fg="#f0f6fc",
             wraplength=380,
             justify="center"
         )
@@ -109,23 +109,23 @@ class GameChooserUI:
             self.root,
             textvariable=self.statsVar,
             font=("Segoe UI", 9),
-            bg="#1e1e24",
-            fg="#a4b0be"
+            bg="#070d14", 
+            fg="#7dd3fc"
         )
         self.statsLabel.pack(pady=(0, 10))
 
         # Buttons Frame
-        btnFrame = Frame(self.root, bg="#1e1e24")
+        btnFrame = Frame(self.root, bg="#070d14")
         btnFrame.pack(pady=5)
 
-        # PLAY Button
+        # PLAY Button - Caçar
         self.btnPlay = Button(
             btnFrame, 
-            text="▶ JOGAR", 
+            text="▶ CAÇAR (JOGAR)", 
             font=("Segoe UI", 10, "bold"), 
-            bg="#00b894", 
+            bg="#0284c7", 
             fg="white", 
-            activebackground="#00a885", 
+            activebackground="#0369a1", 
             activeforeground="white",
             relief="flat",
             padx=15, 
@@ -134,14 +134,14 @@ class GameChooserUI:
         )
         self.btnPlay.grid(row=0, column=0, padx=6)
 
-        # REROLL Button
+        # REROLL Button - Nova Presa
         self.btnReroll = Button(
             btnFrame, 
-            text="🎲 Sortear Outro", 
+            text="🎲 Nova Presa", 
             font=("Segoe UI", 10), 
-            bg="#0984e3", 
+            bg="#1e3a8a", 
             fg="white", 
-            activebackground="#0874c7", 
+            activebackground="#2563eb", 
             activeforeground="white",
             relief="flat",
             padx=12, 
@@ -151,15 +151,15 @@ class GameChooserUI:
         self.btnReroll.grid(row=0, column=1, padx=6)
 
         # Action Buttons (Favorite / Finish)
-        actionFrame = Frame(self.root, bg="#1e1e24")
+        actionFrame = Frame(self.root, bg="#070d14")
         actionFrame.pack(pady=8)
 
         self.btnFav = Button(
             actionFrame,
             text="⭐ Favoritar",
             font=("Segoe UI", 8),
-            bg="#2d3436",
-            fg="#f5f6fa",
+            bg="#121d2a",
+            fg="#c8daea",
             relief="flat",
             padx=8,
             pady=3,
@@ -171,8 +171,8 @@ class GameChooserUI:
             actionFrame,
             text="✔ Marcar como Zerado",
             font=("Segoe UI", 8),
-            bg="#2d3436",
-            fg="#f5f6fa",
+            bg="#121d2a",
+            fg="#c8daea",
             relief="flat",
             padx=8,
             pady=3,

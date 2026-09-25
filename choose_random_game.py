@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Choose Random Game - Main Entry Point.
-Aggregates games from Local folders, Shortcuts, eXoDOS (installed only), and Playnite.
-Launches the Modern Gaming Dashboard.
+Canino Gaming - Ponto de Entrada Principal.
+Inspirado na obra Caninos Brancos (White Fang) de Jack London.
+Agrega jogos de pastas locais, atalhos, eXoDOS (instalados) e Playnite.
+Inicia o Painel Selvagem do Canino Gaming.
 """
 import sys
 import logging
@@ -19,7 +20,7 @@ logging.basicConfig(
     format='[%(levelname)s] %(asctime)s - %(name)s: %(message)s',
     datefmt='%H:%M:%S'
 )
-logger = logging.getLogger("choose_random_game")
+logger = logging.getLogger("canino_gaming")
 
 def run(argv):
     config = Config()
@@ -103,8 +104,8 @@ def run(argv):
     choosedGame = chooseGame(content, sampleSize=config.randomSampleSize)
         
     print("==================================================")
-    print(f"You have {len(content)} games to play!")
-    print(f"CHOSEN GAME -----------> {choosedGame} <-----------")
+    print(f"🐺 CANINO GAMING • {len(content)} presas no território!")
+    print(f"PRESA ESCOLHIDA ----------> {choosedGame} <----------")
     print("==================================================")
 
     # 8. Sync GOTY collection with user's library

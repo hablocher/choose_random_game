@@ -120,3 +120,61 @@ class Config:
         self.streamerYouTubeMainChannel    = self.config.get('STREAMER', 'youtubeMainChannel', fallback='')
         self.streamerYouTubeLiveChannel    = self.config.get('STREAMER', 'youtubeLiveChannel', fallback='')
         self.streamerYouTubeChannel        = self.config.get('STREAMER', 'youtubeChannel', fallback=self.streamerYouTubeLiveChannel)
+
+        # -------------------------------------------------------------
+        # [THEME] Caninos Brancos Wilderness Visual Identity & Backgrounds
+        # -------------------------------------------------------------
+        self.themeBackgroundImage          = self.config.get('THEME', 'backgroundImage', fallback='assets/backgrounds/caninos_brancos_lpm.png')
+        self.themeBackgroundOpacity        = self.config.getfloat('THEME', 'backgroundOpacity', fallback=0.22)
+        self.themeSounds                   = self.config.getboolean('THEME', 'themeSounds', fallback=True)
+
+    def save_theme_setting(self, background_path: str = None, opacity: float = None, theme_sounds: bool = None):
+        """Saves updated background image, opacity, and sound theme to choose_random_game.ini."""
+        import configparser
+        ini_path = "choose_random_game.ini"
+        if not os.path.exists(ini_path):
+            return
+        try:
+            parser = configparser.ConfigParser()
+            parser.read(ini_path, encoding='utf-8')
+            if not parser.has_section("THEME"):
+                parser.add_section("THEME")
+            if background_path is not None:
+                parser.set("THEME", "backgroundImage", str(background_path))
+                self.themeBackgroundImage = str(background_path)
+            if opacity is not None:
+                parser.set("THEME", "backgroundOpacity", f"{opacity:.2f}")
+                self.themeBackgroundOpacity = float(opacity)
+            if theme_sounds is not None:
+                parser.set("THEME", "themeSounds", "True" if theme_sounds else "False")
+                self.themeSounds = bool(theme_sounds)
+            with open(ini_path, 'w', encoding='utf-8') as f:
+                parser.write(f)
+        except Exception as e:
+            pass
+
+    def save_all_settings(self, settings: dict) -> bool:
+        """
+        Saves a dictionary of {section: {key: value}} into choose_random_game.ini
+        and reloads configuration into memory.
+        """
+        import configparser
+        ini_path = "choose_random_game.ini"
+        if not os.path.exists(ini_path):
+            return False
+        try:
+            parser = configparser.ConfigParser()
+            parser.read(ini_path, encoding='utf-8')
+            for section, kvs in settings.items():
+                if not parser.has_section(section):
+                    parser.add_section(section)
+                for k, v in kvs.items():
+                    parser.set(section, k, str(v))
+            with open(ini_path, 'w', encoding='utf-8') as f:
+                parser.write(f)
+            self.read_config([])
+            return True
+        except Exception as e:
+            return False
+
+

@@ -17,11 +17,12 @@ from aesgard.hltb import get_cached_hltb, format_hltb_duration
 
 def generate_live_card(game_str: str,
                        cover_pixmap: QPixmap = None,
-                       channel_name: str = "@Hablocher",
-                       custom_tag: str = "🎮 JOGO DA LIVE",
+                       channel_name: str = "@CaninoBranco",
+                       custom_tag: str = "🐺 JOGO DA LIVE • CANINO GAMING",
                        out_dir: str = "screenshots") -> str:
     """
     Renders a 1200x630 HD promotional card and saves it to out_dir.
+    Themed after Jack London's White Fang (Caninos Brancos) Arctic aesthetic.
     Returns the absolute path of the generated PNG.
     """
     os.makedirs(out_dir, exist_ok=True)
@@ -29,34 +30,34 @@ def generate_live_card(game_str: str,
     width = 1200
     height = 630
     image = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
-    image.fill(QColor("#090d16"))
+    image.fill(QColor("#070d14"))
 
     painter = QPainter(image)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
     painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
 
-    # 1. Background gradient with neon ambient glows
+    # 1. Background gradient with Yukon Arctic night & Northern Lights ambient glows
     bg_grad = QLinearGradient(0, 0, width, height)
-    bg_grad.setColorAt(0.0, QColor("#090d16"))
-    bg_grad.setColorAt(0.5, QColor("#0f172a"))
-    bg_grad.setColorAt(1.0, QColor("#1e1b4b"))
+    bg_grad.setColorAt(0.0, QColor("#060b12"))
+    bg_grad.setColorAt(0.5, QColor("#0a1524"))
+    bg_grad.setColorAt(1.0, QColor("#0d2038"))
     painter.fillRect(0, 0, width, height, bg_grad)
 
-    # Radial ambient spot 1 (cyan glow top-left)
-    rad1 = QRadialGradient(200, 150, 450)
-    rad1.setColorAt(0.0, QColor(6, 182, 212, 50))
-    rad1.setColorAt(1.0, QColor(6, 182, 212, 0))
+    # Radial ambient spot 1 (Glacial Cyan glow top-left)
+    rad1 = QRadialGradient(200, 150, 480)
+    rad1.setColorAt(0.0, QColor(56, 189, 248, 60))
+    rad1.setColorAt(1.0, QColor(56, 189, 248, 0))
     painter.fillRect(0, 0, width, height, rad1)
 
-    # Radial ambient spot 2 (purple glow bottom-right)
-    rad2 = QRadialGradient(1000, 500, 500)
-    rad2.setColorAt(0.0, QColor(139, 92, 246, 60))
-    rad2.setColorAt(1.0, QColor(139, 92, 246, 0))
+    # Radial ambient spot 2 (Boreal Emerald aurora glow bottom-right)
+    rad2 = QRadialGradient(1000, 500, 520)
+    rad2.setColorAt(0.0, QColor(16, 185, 129, 50))
+    rad2.setColorAt(1.0, QColor(16, 185, 129, 0))
     painter.fillRect(0, 0, width, height, rad2)
 
-    # Decorative cyber grid lines / border
-    border_pen = QPen(QColor(56, 189, 248, 120), 2)
+    # Decorative frosty ice border
+    border_pen = QPen(QColor(56, 189, 248, 140), 2)
     painter.setPen(border_pen)
     painter.drawRoundedRect(QRectF(20, 20, width - 40, height - 40), 16, 16)
 
@@ -66,10 +67,10 @@ def generate_live_card(game_str: str,
     cover_w = 340
     cover_h = 500
 
-    # Draw Cover Frame shadow / glow
-    glow_pen = QPen(QColor("#00f2fe"), 3)
+    # Draw Cover Frame shadow / frosty glow
+    glow_pen = QPen(QColor("#38bdf8"), 3)
     painter.setPen(glow_pen)
-    painter.setBrush(QBrush(QColor("#1e293b")))
+    painter.setBrush(QBrush(QColor("#0f1b2b")))
     painter.drawRoundedRect(QRectF(cover_x - 3, cover_y - 3, cover_w + 6, cover_h + 6), 14, 14)
 
     if cover_pixmap and not cover_pixmap.isNull():
@@ -88,17 +89,17 @@ def generate_live_card(game_str: str,
         painter.setPen(QColor("#64748b"))
         painter.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
         painter.drawText(QRectF(cover_x, cover_y, cover_w, cover_h),
-                         Qt.AlignmentFlag.AlignCenter, "🎮 CAPA NÃO\nDISPONÍVEL")
+                         Qt.AlignmentFlag.AlignCenter, "🐺 PRESA SEM\nARTE LOCAL")
 
     # 3. Typography & Information (Right Side)
     info_x = 450
     curr_y = 75
 
-    # Badge: Live / Next Game Tag
-    tag_rect = QRectF(info_x, curr_y, 220, 36)
-    tag_grad = QLinearGradient(info_x, curr_y, info_x + 220, curr_y)
-    tag_grad.setColorAt(0.0, QColor("#ec4899"))
-    tag_grad.setColorAt(1.0, QColor("#8b5cf6"))
+    # Badge: Live / Next Game Tag (Aurora Borealis Gradient)
+    tag_rect = QRectF(info_x, curr_y, 280, 36)
+    tag_grad = QLinearGradient(info_x, curr_y, info_x + 280, curr_y)
+    tag_grad.setColorAt(0.0, QColor("#0284c7"))
+    tag_grad.setColorAt(1.0, QColor("#10b981"))
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(QBrush(tag_grad))
     painter.drawRoundedRect(tag_rect, 18, 18)
@@ -130,34 +131,34 @@ def generate_live_card(game_str: str,
     # Platform & Source Badges
     platform_name = detectPlatform(game_str)
     
-    # Draw Platform Pill
+    # Draw Platform Pill (Frosty Slate)
     plat_font = QFont("Segoe UI", 12, QFont.Weight.Bold)
     painter.setFont(plat_font)
     plat_text = f"🕹️ {platform_name}"
     plat_w = 200
-    painter.setBrush(QBrush(QColor("#0f172a")))
+    painter.setBrush(QBrush(QColor("#0c1522")))
     painter.setPen(QPen(QColor("#38bdf8"), 2))
     painter.drawRoundedRect(QRectF(info_x, curr_y, plat_w, 40), 10, 10)
     painter.setPen(QColor("#38bdf8"))
     painter.drawText(QRectF(info_x, curr_y, plat_w, 40), Qt.AlignmentFlag.AlignCenter, plat_text)
 
-    # HLTB Duration Badge
+    # HLTB Duration Badge (Klondike Gold)
     hltb_data = get_cached_hltb(game_title)
     if hltb_data and hltb_data.get("main_story", 0) > 0:
         main_hours = hltb_data.get("main_story")
-        hltb_text = f"⏱️ ~{main_hours:.1f}h (HLTB)"
+        hltb_text = f"⏱️ ~{main_hours:.1f}h (Campanha)"
         hltb_x = info_x + plat_w + 16
-        hltb_w = 210
-        painter.setBrush(QBrush(QColor("#0f172a")))
-        painter.setPen(QPen(QColor("#a855f7"), 2))
+        hltb_w = 220
+        painter.setBrush(QBrush(QColor("#0c1522")))
+        painter.setPen(QPen(QColor("#f59e0b"), 2))
         painter.drawRoundedRect(QRectF(hltb_x, curr_y, hltb_w, 40), 10, 10)
-        painter.setPen(QColor("#c084fc"))
+        painter.setPen(QColor("#fbbf24"))
         painter.drawText(QRectF(hltb_x, curr_y, hltb_w, 40), Qt.AlignmentFlag.AlignCenter, hltb_text)
 
     curr_y += 65
 
     # Divider bar
-    painter.setPen(QPen(QColor("#334155"), 2))
+    painter.setPen(QPen(QColor("#1e3046"), 2))
     painter.drawLine(info_x, curr_y, info_x + 680, curr_y)
 
     curr_y += 25
@@ -165,13 +166,13 @@ def generate_live_card(game_str: str,
     # Channel & Community Call-to-action
     painter.setPen(QColor("#94a3b8"))
     painter.setFont(QFont("Segoe UI", 13, QFont.Weight.DemiBold))
-    painter.drawText(QRectF(info_x, curr_y, 680, 30), Qt.AlignmentFlag.AlignLeft, "Vem acompanhar a gameplay ao vivo no canal!")
+    painter.drawText(QRectF(info_x, curr_y, 680, 30), Qt.AlignmentFlag.AlignLeft, "Acompanhe a caçada e a gameplay ao vivo no canal!")
 
     curr_y += 45
 
     # Channel Branding Pill
     channel_rect = QRectF(info_x, curr_y, 300, 50)
-    painter.setBrush(QBrush(QColor(15, 23, 42, 230)))
+    painter.setBrush(QBrush(QColor(12, 21, 34, 230)))
     painter.setPen(QPen(QColor("#10b981"), 2))
     painter.drawRoundedRect(channel_rect, 12, 12)
 
@@ -179,10 +180,10 @@ def generate_live_card(game_str: str,
     painter.setFont(QFont("Segoe UI", 15, QFont.Weight.ExtraBold))
     painter.drawText(channel_rect, Qt.AlignmentFlag.AlignCenter, f"📺 {channel_name}")
 
-    # Antigravity / Aesgard Watermark bottom-right
-    painter.setPen(QColor("#64748b"))
+    # Canino Gaming Watermark bottom-right
+    painter.setPen(QColor("#7e95ab"))
     painter.setFont(QFont("Segoe UI", 10, QFont.Weight.Normal))
-    painter.drawText(QRectF(info_x, 560, 680, 25), Qt.AlignmentFlag.AlignRight, "Powered by Choose Random Game • Aesgard Edition")
+    painter.drawText(QRectF(info_x, 560, 680, 25), Qt.AlignmentFlag.AlignRight, "Powered by Canino Gaming • Edição Caninos Brancos")
 
     painter.end()
 

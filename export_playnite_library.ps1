@@ -3,7 +3,7 @@
     Script auxiliar para exportar jogos da biblioteca do Playnite para playnite_games.json.
 .DESCRIPTION
     Lê o banco de dados do Playnite (games.db via LiteDB), mapeia plataformas/emuladores,
-    e salva em playnite_games.json para integração total com o Choose Random Game.
+    e salva em playnite_games.json para integração total com o Canino Gaming.
 #>
 
 param (

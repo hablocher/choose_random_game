@@ -258,7 +258,7 @@ class AchievementsDialog(QDialog):
         self._init_ui()
 
     def _init_ui(self):
-        self.setStyleSheet("background-color: #090d16; color: #ffffff;")
+        self.setStyleSheet("background-color: #070d14; color: #ffffff;")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
@@ -268,7 +268,7 @@ class AchievementsDialog(QDialog):
 
         # Header
         h_row = QHBoxLayout()
-        title = QLabel(f"🏆 TROFÉUS DO BACKLOG ({unlocked_count}/{len(achievements)})")
+        title = QLabel(f"🐺 TROFÉUS DA MATILHA & BACKLOG ({unlocked_count}/{len(achievements)})")
         title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
         title.setStyleSheet("color: #38bdf8;")
         h_row.addWidget(title)
@@ -277,10 +277,10 @@ class AchievementsDialog(QDialog):
         close_btn = QPushButton("✕ Fechar")
         close_btn.setStyleSheet("""
             QPushButton {
-                background-color: #1e293b; color: #cbd5e1;
-                border: 1px solid #334155; border-radius: 6px; padding: 6px 14px; font-weight: bold;
+                background-color: #121d2a; color: #c8daea;
+                border: 1px solid #1f344a; border-radius: 6px; padding: 6px 14px; font-weight: bold;
             }
-            QPushButton:hover { background-color: #334155; color: #ffffff; }
+            QPushButton:hover { background-color: #1a2c3f; color: #ffffff; border-color: #38bdf8; }
         """)
         close_btn.clicked.connect(self.accept)
         h_row.addWidget(close_btn)
@@ -302,8 +302,8 @@ class AchievementsDialog(QDialog):
             if a["unlocked"]:
                 card.setStyleSheet("""
                     QFrame {
-                        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1e1b4b, stop:1 #1e293b);
-                        border: 2px solid #818cf8;
+                        background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0f1c2c, stop:1 #13283f);
+                        border: 2px solid #38bdf8;
                         border-radius: 10px;
                         padding: 8px;
                     }
@@ -314,8 +314,8 @@ class AchievementsDialog(QDialog):
             else:
                 card.setStyleSheet("""
                     QFrame {
-                        background-color: #0f172a;
-                        border: 1px solid #1e293b;
+                        background-color: #0a111a;
+                        border: 1px solid #1c2f44;
                         border-radius: 10px;
                         padding: 8px;
                     }

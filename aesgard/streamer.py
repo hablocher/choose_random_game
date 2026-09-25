@@ -117,36 +117,37 @@ class StreamerOverlayWindow(QWidget):
 
     STYLES = {
         "dark": {
-            "windowBg": "#0d0f14",
-            "cardBg": "#161b26",
-            "border": "#00cec9",
-            "titleColor": "#ffffff",
-            "subColor": "#cbd5e1",
-            "badgeBg": "#e17055",
+            "windowBg": "#070d14",
+            "cardBg": "#0c1522",
+            "border": "#38bdf8",
+            "titleColor": "#f0f6fc",
+            "subColor": "#7dd3fc",
+            "badgeBg": "#0284c7",
             "badgeText": "#ffffff"
         },
         "green": {
             "windowBg": "#00ff00",
-            "cardBg": "#161b26",
-            "border": "#00cec9",
-            "titleColor": "#ffffff",
-            "subColor": "#cbd5e1",
-            "badgeBg": "#e17055",
+            "cardBg": "#0c1522",
+            "border": "#38bdf8",
+            "titleColor": "#f0f6fc",
+            "subColor": "#7dd3fc",
+            "badgeBg": "#0284c7",
             "badgeText": "#ffffff"
         },
         "magenta": {
             "windowBg": "#ff00ff",
-            "cardBg": "#161b26",
-            "border": "#00cec9",
-            "titleColor": "#ffffff",
-            "subColor": "#cbd5e1",
-            "badgeBg": "#e17055",
+            "cardBg": "#0c1522",
+            "border": "#38bdf8",
+            "titleColor": "#f0f6fc",
+            "subColor": "#7dd3fc",
+            "badgeBg": "#0284c7",
             "badgeText": "#ffffff"
         }
     }
 
     def __init__(self, gameTitle: str = "Aguardando Sorteio...", coverPixmap: Optional[QPixmap] = None, platformText: str = "PC / LIVE"):
         super().__init__()
+        self.setWindowTitle("Canino Gaming - OBS Overlay")
         self.currentMode = "dark"
         self.gameTitle = gameTitle
         self.coverPixmap = coverPixmap
@@ -215,7 +216,7 @@ class StreamerOverlayWindow(QWidget):
         infoCol.addWidget(self.titleLabel)
 
         # Subtitle
-        self.subLabel = QLabel("🎮 Jogo sorteado ao vivo • Pronto para rodar!")
+        self.subLabel = QLabel("🐺 Jogo sorteado pelo Canino Gaming • Pronto para rodar!")
         self.subLabel.setFont(QFont("Segoe UI", 10))
         infoCol.addWidget(self.subLabel)
         infoCol.addStretch()

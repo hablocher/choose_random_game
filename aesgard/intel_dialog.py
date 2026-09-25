@@ -34,17 +34,17 @@ class GameIntelDialog(QDialog):
         self.setMinimumSize(680, 480)
         self.setStyleSheet("""
             QDialog {
-                background-color: #0d0f14;
-                color: #e2e8f0;
+                background-color: #070d14;
+                color: #e2ecf5;
             }
             QTabWidget::pane {
-                border: 1px solid #242b3b;
-                background-color: #12151d;
+                border: 1px solid #1c2f44;
+                background-color: #0c1522;
                 border-radius: 8px;
             }
             QTabBar::tab {
-                background-color: #161b26;
-                color: #a0aec0;
+                background-color: #0d1723;
+                color: #8da4b8;
                 padding: 10px 18px;
                 font-weight: bold;
                 font-size: 12px;
@@ -53,14 +53,14 @@ class GameIntelDialog(QDialog):
                 margin-right: 4px;
             }
             QTabBar::tab:selected {
-                background-color: #12151d;
-                color: #00cec9;
-                border-bottom: 2px solid #00cec9;
+                background-color: #0c1522;
+                color: #38bdf8;
+                border-bottom: 2px solid #38bdf8;
             }
             QPushButton {
-                background-color: #1e2433;
+                background-color: #121d2a;
                 color: #ffffff;
-                border: 1px solid #2e384d;
+                border: 1px solid #1f344a;
                 border-radius: 6px;
                 padding: 8px 14px;
                 font-weight: bold;

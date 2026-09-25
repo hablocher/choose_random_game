@@ -11,6 +11,32 @@ from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 CHALLENGES: List[Dict] = [
+    # --- Sobrevivência Selvagem (Jack London / Caninos Brancos) ---
+    {
+        "id": "white_fang_instinct",
+        "category": "Selva do Yukon 🐺",
+        "title": "A Lei da Selva (Instinto Puro)",
+        "desc": "Jogue no instinto: proibido pausar para pensar ou consultar guias/mapas nesta caçada!",
+        "icon": "🐺",
+        "color": "#38bdf8"
+    },
+    {
+        "id": "lone_wolf",
+        "category": "Selva do Yukon 🐺",
+        "title": "Lobo Solitário",
+        "desc": "Proibido recrutar companheiros, invocar summons ou pedir dicas ao chat nos primeiros 30 min!",
+        "icon": "❄️",
+        "color": "#0ea5e9"
+    },
+    {
+        "id": "blizzard_endurance",
+        "category": "Selva do Yukon 🐺",
+        "title": "Resistência à Nevasca",
+        "desc": "Sobreviva 1 hora de gameplay contínua sem nenhum Game Over na trilha congelada!",
+        "icon": "🏔️",
+        "color": "#10b981"
+    },
+
     # --- Hardcore ---
     {
         "id": "no_heal",

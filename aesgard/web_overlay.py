@@ -21,22 +21,22 @@ DEFAULT_PORT = 8089
 _OVERLAY_STATE = {
     "title": "Nenhum Jogo Selecionado",
     "platform": "PC",
-    "platform_color": "#0984e3",
-    "status": "🎲 SORTEADOR DE JOGOS",
+    "platform_color": "#0284c7",
+    "status": "🐺 CANINO GAMING",
     "hltb": "",
     "cover_base64": "",
     "timer_text": "00:00:00",
     "is_playing": False,
-    "channel_handle": "@ChooseRandomGame",
+    "channel_handle": "@CaninoBranco",
     "challenge": {
         "active": False,
         "title": "",
         "desc": "",
-        "icon": "🎯"
+        "icon": "🐺"
     },
     "poll": {
         "active": False,
-        "question": "Qual jogo devemos jogar a seguir?",
+        "question": "Qual presa devemos caçar a seguir?",
         "options": [
             {"title": "Opção 1", "platform": "PC", "votes": 0, "pct": 0},
             {"title": "Opção 2", "platform": "PC", "votes": 0, "pct": 0},
@@ -49,7 +49,7 @@ _OVERLAY_STATE = {
 _SERVER_INSTANCE: Optional[HTTPServer] = None
 _SERVER_THREAD: Optional[threading.Thread] = None
 
-def update_overlay_game(title: str, platform: str = "Retro", hltb_text: str = "", cover_pixmap=None, platform_color: str = "#00cec9", status: str = "🎲 SORTEADO"):
+def update_overlay_game(title: str, platform: str = "Retro", hltb_text: str = "", cover_pixmap=None, platform_color: str = "#38bdf8", status: str = "🐺 PRESA SORTEADA"):
     """Updates the active game state for the OBS overlay."""
     _OVERLAY_STATE["title"] = title
     _OVERLAY_STATE["platform"] = platform
@@ -74,13 +74,13 @@ def update_overlay_timer(timer_str: str, is_playing: bool = True):
     _OVERLAY_STATE["timer_text"] = timer_str
     _OVERLAY_STATE["is_playing"] = is_playing
     if is_playing:
-        _OVERLAY_STATE["status"] = "🎮 EM JOGO NA LIVE"
+        _OVERLAY_STATE["status"] = "🐺 EM CAÇADA NA LIVE"
 
 def update_overlay_channel(channel_handle: str):
     """Updates the channel name/handle shown on the overlay."""
-    _OVERLAY_STATE["channel_handle"] = channel_handle or "@ChooseRandomGame"
+    _OVERLAY_STATE["channel_handle"] = channel_handle or "@CaninoBranco"
 
-def update_overlay_challenge(title: str = "", desc: str = "", icon: str = "🎯"):
+def update_overlay_challenge(title: str = "", desc: str = "", icon: str = "🐺"):
     """Updates the active live challenge shown on the OBS overlay."""
     _OVERLAY_STATE["challenge"] = {
         "active": bool(title),
@@ -148,7 +148,7 @@ OVERLAY_HTML = """<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>OBS Studio Game HUD Overlay</title>
+    <title>Canino Gaming - OBS Overlay</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -163,12 +163,12 @@ OVERLAY_HTML = """<!DOCTYPE html>
         }
 
         .hud-card {
-            background: rgba(13, 15, 20, 0.88);
+            background: rgba(7, 13, 20, 0.92);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-left: 4px solid #00cec9;
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65), 0 0 25px rgba(0, 206, 201, 0.2);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-left: 4px solid #38bdf8;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7), 0 0 25px rgba(56, 189, 248, 0.25);
             border-radius: 16px;
             padding: 16px 20px;
             display: flex;
@@ -192,8 +192,8 @@ OVERLAY_HTML = """<!DOCTYPE html>
             overflow: hidden;
             flex-shrink: 0;
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            background: #1e272e;
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            background: #0f1b2b;
         }
 
         .cover-wrap img {
@@ -224,9 +224,9 @@ OVERLAY_HTML = """<!DOCTYPE html>
             letter-spacing: 1px;
             padding: 3px 8px;
             border-radius: 4px;
-            background: rgba(0, 206, 201, 0.15);
-            color: #00cec9;
-            border: 1px solid rgba(0, 206, 201, 0.3);
+            background: rgba(56, 189, 248, 0.15);
+            color: #38bdf8;
+            border: 1px solid rgba(56, 189, 248, 0.35);
         }
 
         .platform-badge {
@@ -236,7 +236,7 @@ OVERLAY_HTML = """<!DOCTYPE html>
             padding: 3px 8px;
             border-radius: 4px;
             color: #ffffff;
-            background-color: #0984e3;
+            background-color: #0284c7;
             text-transform: uppercase;
         }
 
@@ -245,9 +245,9 @@ OVERLAY_HTML = """<!DOCTYPE html>
             font-weight: 700;
             padding: 3px 8px;
             border-radius: 4px;
-            background: rgba(241, 196, 15, 0.15);
-            color: #f1c40f;
-            border: 1px solid rgba(241, 196, 15, 0.3);
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.35);
             display: none;
         }
 
@@ -282,7 +282,7 @@ OVERLAY_HTML = """<!DOCTYPE html>
         .timer-badge {
             font-family: 'Consolas', 'Courier New', monospace;
             font-weight: 700;
-            color: #00cec9;
+            color: #38bdf8;
             background: rgba(0, 0, 0, 0.4);
             padding: 2px 6px;
             border-radius: 4px;
@@ -296,7 +296,7 @@ OVERLAY_HTML = """<!DOCTYPE html>
         </div>
         <div class="info-col">
             <div class="tag-row">
-                <span class="status-badge" id="statusBadge">🎲 SORTEADO</span>
+                <span class="status-badge" id="statusBadge">🐺 CANINO GAMING</span>
                 <span class="platform-badge" id="platformBadge">PC</span>
                 <span class="hltb-badge" id="hltbBadge">⏱️ ~15h</span>
             </div>

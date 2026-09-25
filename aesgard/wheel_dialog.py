@@ -21,11 +21,11 @@ class SpinningWheelWidget(QWidget):
     """Custom QWidget that draws a segmented spinning wheel with ease-out animation."""
     spinFinished = pyqtSignal(str)
 
-    # Vibrant cyberpunk / retro-synth palette for wheel slices
+    # Caninos Brancos Arctic, Northern Lights & Klondike Gold palette
     PALETTE = [
-        QColor("#e81cff"), QColor("#40c9ff"), QColor("#ff007f"), QColor("#00f2fe"),
-        QColor("#fee140"), QColor("#fa709a"), QColor("#30cfd0"), QColor("#330867"),
-        QColor("#f857a6"), QColor("#ff5858"), QColor("#667eea"), QColor("#764ba2")
+        QColor("#38bdf8"), QColor("#0284c7"), QColor("#10b981"), QColor("#f59e0b"),
+        QColor("#059669"), QColor("#7dd3fc"), QColor("#d97706"), QColor("#1d4ed8"),
+        QColor("#34d399"), QColor("#b45309"), QColor("#60a5fa"), QColor("#0d9488")
     ]
 
     def __init__(self, candidates: list[str], parent=None):
@@ -181,12 +181,12 @@ class WheelOfFortuneDialog(QDialog):
         super().__init__(parent)
         self.candidates = candidates
         self.winner = None
-        self.setWindowTitle("🎡 Roda da Fortuna Gamer - Sorteio ao Vivo")
+        self.setWindowTitle("Canino Gaming - Roda da Fortuna Selvagem")
         self.setFixedSize(520, 640)
         self.setStyleSheet("""
             QDialog {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #090d16, stop:0.5 #0f172a, stop:1 #1e1b4b);
+                    stop:0 #070d14, stop:0.5 #0c1524, stop:1 #0f2238);
             }
         """)
 
@@ -198,12 +198,12 @@ class WheelOfFortuneDialog(QDialog):
         layout.setSpacing(14)
 
         # Header
-        title = QLabel("🎡 RODA DA FORTUNA GAMER")
+        title = QLabel("🐺 RODA DA FORTUNA SELVAGEM")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("font-size: 20px; font-weight: 900; color: #38bdf8; letter-spacing: 1px;")
         layout.addWidget(title)
 
-        subtitle = QLabel("Gire a roda e deixe o destino escolher o próximo jogo da live!")
+        subtitle = QLabel("Gire a roda e deixe o instinto do Yukon escolher a próxima presa da live!")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtitle.setStyleSheet("font-size: 11px; color: #94a3b8;")
         layout.addWidget(subtitle)
@@ -217,13 +217,13 @@ class WheelOfFortuneDialog(QDialog):
         self.lbl_result = QLabel("Clique no botão abaixo para girar!")
         self.lbl_result.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_result.setStyleSheet("""
-            background: rgba(15, 23, 42, 0.8);
-            border: 1px solid #334155;
+            background: rgba(12, 21, 34, 0.9);
+            border: 1px solid #1e354e;
             border-radius: 8px;
             padding: 8px;
             font-size: 13px;
             font-weight: bold;
-            color: #f8fafc;
+            color: #f0f6fc;
         """)
         layout.addWidget(self.lbl_result)
 
@@ -231,12 +231,12 @@ class WheelOfFortuneDialog(QDialog):
         btn_box = QHBoxLayout()
         btn_box.setSpacing(12)
 
-        self.btn_spin = QPushButton("⚡ GIRAR RODA!")
+        self.btn_spin = QPushButton("🐺 GIRAR RODA SELVAGEM!")
         self.btn_spin.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_spin.setFixedHeight(44)
         self.btn_spin.setStyleSheet("""
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8b5cf6, stop:1 #06b6d4);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #10b981);
                 color: #ffffff;
                 font-weight: 900;
                 font-size: 14px;
@@ -245,17 +245,17 @@ class WheelOfFortuneDialog(QDialog):
                 padding: 0 20px;
             }
             QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #a78bfa, stop:1 #22d3ee);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0369a1, stop:1 #34d399);
             }
             QPushButton:disabled {
-                background: #475569;
-                color: #94a3b8;
+                background: #1c2b3d;
+                color: #64748b;
             }
         """)
         self.btn_spin.clicked.connect(self._start_spin)
         btn_box.addWidget(self.btn_spin)
 
-        self.btn_choose = QPushButton("🎮 Jogar Este")
+        self.btn_choose = QPushButton("▶ Caçar Esta Presa")
         self.btn_choose.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_choose.setFixedHeight(44)
         self.btn_choose.setEnabled(False)
@@ -273,7 +273,7 @@ class WheelOfFortuneDialog(QDialog):
                 background: #059669;
             }
             QPushButton:disabled {
-                background: #334155;
+                background: #1c2b3d;
                 color: #64748b;
             }
         """)

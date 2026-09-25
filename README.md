@@ -1,20 +1,20 @@
-# 🎮 Choose Random Game & Live Stream Assistant
+# 🐺 Canino Gaming • Backlog Selvagem & Live Stream Assistant
 
 [![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)](https://www.python.org/)
 [![GUI](https://img.shields.io/badge/GUI-PyQt6-green?logo=qt)](https://riverbankcomputing.com/software/pyqt/)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **Aplicativo inteligente para gerenciamento de backlog, sorteio ponderado de jogos e assistente completo para transmissões ao vivo no YouTube.**
+> **Aplicativo inteligente para gerenciamento da selva do backlog, sorteio ponderado de jogos e assistente completo para transmissões ao vivo no YouTube. Inspirado no clássico romance *Caninos Brancos* (*White Fang*) de Jack London e na atmosfera ártica e selvagem do Yukon.**
 
-Criado especialmente para streamers e gamers com bibliotecas gigantescas (Steam, GOG, Playnite, eXoDOS, emuladores e pastas locais) que nunca sabem o que jogar ou querem transformar a escolha do jogo em uma atração interativa ao vivo com o chat da live!
+Criado especialmente para streamers e gamers com bibliotecas gigantescas (Steam, GOG, Playnite, eXoDOS, emuladores e pastas locais) que nunca sabem o que jogar ou querem transformar a escolha da próxima presa em uma atração interativa ao vivo com a matilha do chat!
 
 ---
 
 ## ✨ Principais Funcionalidades
 
-### 🖥️ Gaming Dashboard PyQt6
-- **Interface Dark Gamer**: Layout responsivo moderno com paleta escura, cards iluminados e badges por plataforma.
+### 🐺 Painel Selvagem Canino Gaming (PyQt6)
+- **Identidade Visual Caninos Brancos**: Tema ártico boreal de alta fidelidade inspirado nas florestas geladas e noites de Yukon do romance de Jack London, com gradientes de Aurora Boreal, cartas glaciais com rim lights e tons de ouro de Klondike.
 - **Estatísticas em Tempo Real**: Total do acervo, sessões registradas, taxa de conclusão do backlog e jogos favoritados.
 - **Minimização Inteligente**: Ao iniciar qualquer jogo, o dashboard minimiza automaticamente para a barra de tarefas para liberar a tela e recursos do PC.
 - **Limpeza Inteligente de Banco**: Varre o disco procurando por jogos desinstalados e remove registros órfãos sem apagar nenhum arquivo pessoal.
@@ -193,7 +193,7 @@ Para exibir o jogo sorteado ao vivo na sua transmissão sem mostrar a janela int
 2. Uma janela compacta, sem bordas (*frameless*) e sempre no topo será aberta.
 3. No **OBS Studio**:
    - Adicione uma nova fonte: **Captura de Janela** (*Window Capture*).
-   - Selecione a janela `Choose Random Game - OBS Overlay`.
+   - Selecione a janela `Canino Gaming - OBS Overlay`.
    - Método de captura: *Windows 10 (1903 e superior)* ou *Automático*.
 4. **Filtro de Transparência (Chroma Key)**:
    - Se preferir fundo transparente, clique no botão **"🟩 Verde"** ou **"🟪 Magenta"** no topo da janelinha do overlay.

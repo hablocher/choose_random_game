@@ -171,7 +171,7 @@ class AnalyticsDialog(QDialog):
 
     def __init__(self, content: List[str], parent=None):
         super().__init__(parent)
-        self.setWindowTitle("📊 Métricas & Estatísticas do Backlog")
+        self.setWindowTitle("🐺 Canino Gaming • Métricas & Estatísticas do Território")
         self.setFixedSize(860, 640)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
         self.content = content
@@ -180,17 +180,17 @@ class AnalyticsDialog(QDialog):
     def _init_ui(self):
         self.setStyleSheet("""
             QDialog {
-                background-color: #090d16;
+                background-color: #070d14;
                 color: #ffffff;
             }
             QFrame#StatCard {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #111827, stop:1 #1f2937);
-                border: 1px solid #374151;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #101a26, stop:1 #091018);
+                border: 1px solid #1c3247;
                 border-radius: 10px;
             }
             QFrame#AnalyticsCard {
-                background-color: #0d121f;
-                border: 1px solid #1e293b;
+                background-color: #0c1420;
+                border: 1px solid #1c2f44;
                 border-radius: 12px;
             }
             QLabel {
@@ -207,7 +207,7 @@ class AnalyticsDialog(QDialog):
 
         # Header
         h_row = QHBoxLayout()
-        title = QLabel("📊 ESTATÍSTICAS DA SUA COLEÇÃO")
+        title = QLabel("🐺 ESTATÍSTICAS DO TERRITÓRIO & COLEÇÃO")
         title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
         title.setStyleSheet("color: #38bdf8;")
         h_row.addWidget(title)
@@ -216,10 +216,10 @@ class AnalyticsDialog(QDialog):
         close_btn = QPushButton("✕ Fechar")
         close_btn.setStyleSheet("""
             QPushButton {
-                background-color: #1e293b; color: #cbd5e1;
-                border: 1px solid #334155; border-radius: 6px; padding: 6px 14px; font-weight: bold;
+                background-color: #121d2a; color: #c8daea;
+                border: 1px solid #1f344a; border-radius: 6px; padding: 6px 14px; font-weight: bold;
             }
-            QPushButton:hover { background-color: #334155; color: #ffffff; }
+            QPushButton:hover { background-color: #1a2c3f; color: #ffffff; border-color: #38bdf8; }
         """)
         close_btn.clicked.connect(self.accept)
         h_row.addWidget(close_btn)

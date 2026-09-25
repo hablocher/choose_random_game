@@ -21,10 +21,14 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QLineEdit, QComboBox, QTableWidget,
     QTableWidgetItem, QHeaderView, QFrame, QSplitter, QMessageBox,
-    QStackedWidget, QButtonGroup, QProgressDialog, QCheckBox, QGridLayout
+    QStackedWidget, QButtonGroup, QProgressDialog, QCheckBox, QGridLayout,
+    QMenu, QFileDialog, QInputDialog
 )
 from PyQt6.QtCore import Qt, QSize, QTimer, QRectF
-from PyQt6.QtGui import QFont, QPixmap, QImage, QColor, QIcon, QPainter, QPen, QBrush
+from PyQt6.QtGui import (
+    QFont, QPixmap, QImage, QColor, QIcon, QPainter, QPen, QBrush,
+    QLinearGradient, QRadialGradient, QAction
+)
 
 from aesgard.gameutil import (
     executeGame, installGame, scanAllSources, findGameIcon, chooseGame,
@@ -57,26 +61,27 @@ from aesgard.chat_bot import get_chat_bot
 from aesgard.achievements import unlock_achievement, AchievementsDialog
 from aesgard.analytics import AnalyticsDialog
 from aesgard.backup import backup_game_saves
+from aesgard.config_dialog import ConfigDialog
 import subprocess
 import time
 
 logger = logging.getLogger(__name__)
 
-# Dark Mode Modern QSS
+# Caninos Brancos (White Fang) & Arctic Wild QSS Stylesheet
 STYLESHEET = """
 QMainWindow {
-    background-color: #0d0f14;
+    background-color: #070d14;
 }
 
 QWidget {
-    font-family: 'Segoe UI', Arial, sans-serif;
-    color: #e2e8f0;
+    font-family: 'Segoe UI', -apple-system, Arial, sans-serif;
+    color: #e2ecf5;
 }
 
-/* Header & Stat Cards */
+/* Header & Outpost Stat Cards */
 QFrame#StatCard {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1a1e29, stop:1 #131722);
-    border: 1px solid #2a3142;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(16, 26, 38, 220), stop:1 rgba(9, 16, 24, 230));
+    border: 1px solid #1c3247;
     border-radius: 10px;
     padding: 6px 8px;
 }
@@ -84,59 +89,82 @@ QFrame#StatCard {
 QLabel#StatValue {
     font-size: 20px;
     font-weight: bold;
-    color: #00cec9;
+    color: #38bdf8;
 }
 
 QLabel#StatLabel {
     font-size: 10px;
-    color: #8c96a8;
+    color: #8da4b8;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
 }
 
-/* Nav Tabs */
+/* Yukon Nav Tabs */
 QPushButton.NavBtn {
-    background-color: #161a24;
-    border: 1px solid #2b3244;
+    background-color: rgba(13, 21, 33, 225);
+    border: 1px solid #1a2c3f;
     border-radius: 8px;
-    color: #a0aec0;
+    color: #94a9be;
     font-size: 12px;
     font-weight: bold;
     padding: 7px 12px;
 }
 QPushButton.NavBtn:hover {
-    background-color: #1f2533;
-    color: #ffffff;
-    border-color: #3e4a63;
+    background-color: #142234;
+    color: #f0f6fc;
+    border-color: #2b4563;
 }
 QPushButton.NavBtn:checked {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0984e3, stop:1 #6c5ce7);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:0.5 #0369a1, stop:1 #0f766e);
     color: #ffffff;
-    border-color: #6c5ce7;
+    border-color: #38bdf8;
 }
 
-/* Hero Section */
+/* Boreal Hero Card */
 QFrame#HeroCard {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #181c26, stop:1 #12151d);
-    border: 1px solid #2b3244;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(15, 28, 44, 215), stop:0.6 rgba(10, 19, 30, 225), stop:1 rgba(7, 13, 20, 235));
+    border: 1px solid #1f3b58;
     border-radius: 14px;
     padding: 18px;
 }
 
-/* Game of the Day Card */
+/* Instinto Selvagem (Game of the Day) Card */
 QFrame#GotdCard {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1a2233, stop:1 #111520);
-    border: 1px solid #00cec9;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(14, 39, 62, 220), stop:0.5 rgba(9, 26, 42, 230), stop:1 rgba(6, 16, 26, 240));
+    border: 1px solid #38bdf8;
     border-radius: 16px;
     padding: 24px;
 }
 
-/* GOTY Card (Golden) */
+/* Ouro de Klondike (GOTY) Card */
 QFrame#GotyCard {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2c2214, stop:1 #16120d);
-    border: 1px solid #d4af37;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(43, 28, 11, 225), stop:0.5 rgba(25, 16, 6, 235), stop:1 rgba(13, 8, 3, 245));
+    border: 1px solid #f59e0b;
     border-radius: 16px;
     padding: 24px;
+}
+
+/* Yukon / Arctic Themed Popup Menu */
+QMenu {
+    background-color: #0c1420;
+    color: #e2ecf5;
+    border: 1px solid #1c3247;
+    border-radius: 8px;
+    padding: 6px;
+}
+QMenu::item {
+    padding: 7px 22px 7px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+QMenu::item:selected {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #0369a1);
+    color: #ffffff;
+}
+QMenu::separator {
+    height: 1px;
+    background: #1c3247;
+    margin: 4px 8px;
 }
 
 QLabel#GameTitle {
@@ -146,18 +174,19 @@ QLabel#GameTitle {
 }
 
 QLabel#PlatformBadge {
-    background-color: #2d3748;
-    color: #a0aec0;
+    background-color: #1a2a3e;
+    color: #94a9be;
+    border: 1px solid #233b54;
     border-radius: 6px;
     padding: 4px 10px;
     font-size: 11px;
     font-weight: bold;
 }
 
-/* Buttons */
+/* Action Buttons */
 QPushButton#BtnPlay {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00b894, stop:1 #00cec9);
-    color: #0d0f14;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:0.5 #0ea5e9, stop:1 #10b981);
+    color: #ffffff;
     font-size: 14px;
     font-weight: bold;
     border: none;
@@ -165,14 +194,14 @@ QPushButton#BtnPlay {
     padding: 12px 20px;
 }
 QPushButton#BtnPlay:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00c9a0, stop:1 #10dfda);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0369a1, stop:0.5 #38bdf8, stop:1 #34d399);
 }
 QPushButton#BtnPlay:pressed {
-    background: #00a885;
+    background: #0284c7;
 }
 
 QPushButton#BtnReroll {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0984e3, stop:1 #6c5ce7);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1e3a8a, stop:0.5 #2563eb, stop:1 #0284c7);
     color: #ffffff;
     font-size: 13px;
     font-weight: bold;
@@ -181,12 +210,12 @@ QPushButton#BtnReroll {
     padding: 10px 18px;
 }
 QPushButton#BtnReroll:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1a92ec, stop:1 #7d6ef0);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #38bdf8);
 }
 
 QPushButton#BtnGoty {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #d4af37, stop:1 #f39c12);
-    color: #12100a;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #b45309, stop:0.5 #d97706, stop:1 #f59e0b);
+    color: #0e0903;
     font-size: 14px;
     font-weight: bold;
     border: none;
@@ -194,77 +223,90 @@ QPushButton#BtnGoty {
     padding: 12px 22px;
 }
 QPushButton#BtnGoty:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e5c158, stop:1 #f1c40f);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #d97706, stop:1 #fbbf24);
 }
 
 QPushButton#BtnSecondary {
-    background-color: #222734;
-    border: 1px solid #323b4f;
-    color: #cbd5e1;
+    background-color: #121d2a;
+    border: 1px solid #1f344a;
+    color: #c8daea;
     font-size: 11px;
     font-weight: 600;
     border-radius: 6px;
     padding: 5px 9px;
 }
 QPushButton#BtnSecondary:hover {
-    background-color: #2a3142;
-    border-color: #4a5568;
+    background-color: #1a2c3f;
+    border-color: #38bdf8;
     color: #ffffff;
+}
+
+QPushButton#BtnConfig {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0369a1, stop:0.5 #0284c7, stop:1 #0f766e);
+    border: 1px solid #38bdf8;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 5px 12px;
+}
+QPushButton#BtnConfig:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #38bdf8);
 }
 
 /* Inputs & Combos */
 QLineEdit {
-    background-color: #161a24;
-    border: 1px solid #2b3244;
+    background-color: #0c1420;
+    border: 1px solid #1c2f44;
     border-radius: 8px;
     padding: 8px 12px;
     color: #ffffff;
     font-size: 13px;
 }
 QLineEdit:focus {
-    border-color: #0984e3;
+    border-color: #38bdf8;
 }
 
 QComboBox {
-    background-color: #161a24;
-    border: 1px solid #2b3244;
+    background-color: #0c1420;
+    border: 1px solid #1c2f44;
     border-radius: 6px;
     padding: 6px 12px;
-    color: #cbd5e1;
+    color: #c8daea;
     font-size: 12px;
 }
 QComboBox::drop-down {
     border: none;
 }
 QComboBox QAbstractItemView {
-    background-color: #1a1e29;
-    border: 1px solid #2a3142;
-    selection-background-color: #0984e3;
+    background-color: #0f1927;
+    border: 1px solid #1c2f44;
+    selection-background-color: #0284c7;
     color: #ffffff;
 }
 
 /* Table Widget */
 QTableWidget {
-    background-color: #131720;
-    border: 1px solid #242b3b;
+    background-color: #091018;
+    border: 1px solid #172738;
     border-radius: 8px;
-    gridline-color: #1e2433;
+    gridline-color: #14202e;
     font-size: 12px;
 }
 QTableWidget::item {
     padding: 6px;
-    border-bottom: 1px solid #1a202d;
+    border-bottom: 1px solid #111b26;
 }
 QTableWidget::item:selected {
-    background-color: #1e3a5f;
+    background-color: #153b61;
     color: #ffffff;
 }
 QHeaderView::section {
-    background-color: #181d28;
-    color: #8c96a8;
+    background-color: #0d1723;
+    color: #8ba3ba;
     padding: 8px;
     border: none;
-    border-bottom: 2px solid #2a3142;
+    border-bottom: 2px solid #1f3750;
     font-weight: bold;
     font-size: 11px;
     text-transform: uppercase;
@@ -272,32 +314,35 @@ QHeaderView::section {
 
 /* Scrollbars */
 QScrollBar:vertical {
-    background: #11131a;
+    background: #080d14;
     width: 10px;
     margin: 0px;
 }
 QScrollBar::handle:vertical {
-    background: #2b3244;
+    background: #1b2e42;
     min-height: 20px;
     border-radius: 5px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #294563;
 }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0px;
 }
 
-/* Dialogs & MessageBoxes (Dark Mode Contrast) */
+/* Dialogs & MessageBoxes (Arctic Frost Contrast) */
 QDialog, QMessageBox, QProgressDialog {
-    background-color: #12151d;
-    color: #e2e8f0;
+    background-color: #0a121d;
+    color: #e2ecf5;
 }
 QMessageBox QLabel, QProgressDialog QLabel {
-    color: #e2e8f0;
+    color: #e2ecf5;
     font-size: 13px;
     background-color: transparent;
 }
 QMessageBox QPushButton, QProgressDialog QPushButton {
-    background-color: #222734;
-    border: 1px solid #323b4f;
+    background-color: #131e2c;
+    border: 1px solid #22374d;
     color: #ffffff;
     font-size: 12px;
     font-weight: bold;
@@ -306,24 +351,24 @@ QMessageBox QPushButton, QProgressDialog QPushButton {
     min-width: 80px;
 }
 QMessageBox QPushButton:hover, QProgressDialog QPushButton:hover {
-    background-color: #2a3142;
-    border-color: #0984e3;
+    background-color: #1c2d40;
+    border-color: #38bdf8;
     color: #ffffff;
 }
 QMessageBox QPushButton:pressed, QProgressDialog QPushButton:pressed {
-    background-color: #1a1e29;
+    background-color: #101a26;
 }
 
 QProgressBar {
-    background-color: #161a24;
-    border: 1px solid #2b3244;
+    background-color: #0c1420;
+    border: 1px solid #1c2f44;
     border-radius: 6px;
     text-align: center;
     color: #ffffff;
     font-weight: bold;
 }
 QProgressBar::chunk {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00b894, stop:1 #00cec9);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #38bdf8);
     border-radius: 5px;
 }
 """
@@ -338,6 +383,52 @@ def extractChannelHandle(url: str, default: str = "") -> str:
         return '@' + clean.split('@')[-1]
     part = clean.split('/')[-1]
     return part if part else default
+
+
+class ThemedCentralWidget(QWidget):
+    """
+    Central widget for Caninos Brancos / White Fang theme.
+    Renders background book art with smooth aspect-ratio scaling, customizable opacity,
+    and an atmospheric vignette gradient overlay for high contrast and readability.
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.bgPixmap = None
+        self.bgOpacity = 0.22
+
+    def setBackground(self, pixmap, opacity: float):
+        self.bgPixmap = pixmap
+        self.bgOpacity = max(0.0, min(1.0, float(opacity)))
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+
+        # 1. Base deep Yukon night background
+        painter.fillRect(self.rect(), QColor("#070d14"))
+
+        # 2. Draw background image if set
+        if self.bgPixmap and not self.bgPixmap.isNull() and self.bgOpacity > 0.001:
+            scaled = self.bgPixmap.scaled(
+                self.size(),
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            x = (self.width() - scaled.width()) // 2
+            y = (self.height() - scaled.height()) // 2
+            painter.setOpacity(self.bgOpacity)
+            painter.drawPixmap(x, y, scaled)
+
+            # 3. Vignette & contrast overlay
+            painter.setOpacity(1.0)
+            grad = QLinearGradient(0, 0, 0, self.height())
+            grad.setColorAt(0.0, QColor(7, 13, 20, 205))
+            grad.setColorAt(0.28, QColor(7, 13, 20, 140))
+            grad.setColorAt(0.72, QColor(7, 13, 20, 160))
+            grad.setColorAt(1.0, QColor(7, 13, 20, 235))
+            painter.fillRect(self.rect(), grad)
 
 
 class GamingDashboard(QMainWindow):
@@ -377,7 +468,7 @@ class GamingDashboard(QMainWindow):
             logger.warning(f"Não foi possível iniciar servidor de overlay web: {e}")
             self.overlayServerStarted = False
 
-        self.setWindowTitle("Choose Random Game - Gaming Dashboard & Live Stream Assistant")
+        self.setWindowTitle("Canino Gaming - Backlog Selvagem & Live Stream Assistant")
         w = getattr(self.config, 'uiWindowWidth', 1280)
         h = getattr(self.config, 'uiWindowHeight', 780)
         min_w = getattr(self.config, 'uiMinWidth', 1100)
@@ -386,10 +477,19 @@ class GamingDashboard(QMainWindow):
         self.setMinimumSize(min_w, min_h)
         self.setStyleSheet(STYLESHEET)
 
-        # Main Central Container
-        centralWidget = QWidget()
-        self.setCentralWidget(centralWidget)
-        self.mainLayout = QVBoxLayout(centralWidget)
+        # Main Central Container with Caninos Brancos Theme
+        self.bgImagePath = getattr(self.config, 'themeBackgroundImage', 'assets/backgrounds/caninos_brancos_lpm.png')
+        self.bgOpacity = getattr(self.config, 'themeBackgroundOpacity', 0.22)
+        get_sound_manager().set_theme_mode(getattr(self.config, 'themeSounds', True))
+
+        self.centralContainer = ThemedCentralWidget(self)
+        self.setCentralWidget(self.centralContainer)
+        self._bgPixmap = None
+        if self.bgImagePath and os.path.exists(self.bgImagePath):
+            self._bgPixmap = QPixmap(self.bgImagePath)
+        self.centralContainer.setBackground(self._bgPixmap, self.bgOpacity)
+
+        self.mainLayout = QVBoxLayout(self.centralContainer)
         self.mainLayout.setContentsMargins(20, 20, 20, 20)
         self.mainLayout.setSpacing(14)
 
@@ -437,7 +537,7 @@ class GamingDashboard(QMainWindow):
         self.refreshStats()
         self.refreshTable()
         self.onRerollGotd(initial=True)
-        self.onRerollGoty()
+        self.onRerollGoty(initial=True)
 
         # Center Window
         self.centerOnScreen()
@@ -455,44 +555,20 @@ class GamingDashboard(QMainWindow):
         headerLayout = QHBoxLayout()
         headerLayout.setSpacing(10)
 
-        # App Title & Subtitle
+        # App Title & Subtitle - Canino Gaming (Inspirado em Caninos Brancos de Jack London)
         titleBox = QVBoxLayout()
         titleBox.setSpacing(1)
-        titleLabel = QLabel("🎮 CHOOSE RANDOM GAME")
+        titleLabel = QLabel("🐺 CANINO GAMING")
         titleLabel.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-        titleLabel.setStyleSheet("color: #ffffff; letter-spacing: 0.5px;")
+        titleLabel.setStyleSheet("color: #f0f6fc; letter-spacing: 0.8px;")
         
-        subtitleLabel = QLabel("Gaming Backlog & Intelligent Random Launcher")
+        subtitleLabel = QLabel("Caninos Brancos • A Selva do Backlog Gamer & Sorteador Selvagem")
         subtitleLabel.setFont(QFont("Segoe UI", 8))
-        subtitleLabel.setStyleSheet("color: #8c96a8;")
+        subtitleLabel.setStyleSheet("color: #7dd3fc;")
         
         titleBox.addWidget(titleLabel)
         titleBox.addWidget(subtitleLabel)
         headerLayout.addLayout(titleBox)
-
-        # Synchronize Sources Button
-        self.btnSyncSources = QPushButton("🔄 Sincronizar")
-        self.btnSyncSources.setObjectName("BtnSecondary")
-        self.btnSyncSources.setToolTip("Re-importa e sincroniza todos os jogos (instalados ou não) de todas as fontes (Playnite, eXoDOS, atalhos, pastas)")
-        self.btnSyncSources.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btnSyncSources.clicked.connect(self.onSyncSources)
-        headerLayout.addWidget(self.btnSyncSources)
-
-        # Clean Database Button
-        self.btnCleanDb = QPushButton("🧹 Limpar")
-        self.btnCleanDb.setObjectName("BtnSecondary")
-        self.btnCleanDb.setToolTip("Verifica jogos que não estão mais instalados e os marca como NÃO INSTALADOS (preserva histórico e favoritos)")
-        self.btnCleanDb.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btnCleanDb.clicked.connect(self.onCleanDatabase)
-        headerLayout.addWidget(self.btnCleanDb)
-
-        # 1-Click Playnite Exporter
-        self.btnExportPlaynite = QPushButton("⚡ Playnite")
-        self.btnExportPlaynite.setObjectName("BtnSecondary")
-        self.btnExportPlaynite.setToolTip("Dispara o script do Playnite para re-exportar a biblioteca completa (jogos de PC e emuladores)")
-        self.btnExportPlaynite.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btnExportPlaynite.clicked.connect(self.onExportPlaynite)
-        headerLayout.addWidget(self.btnExportPlaynite)
 
         # Web Overlay for OBS
         self.btnWebOverlay = QPushButton("📡 Overlay")
@@ -518,14 +594,22 @@ class GamingDashboard(QMainWindow):
         self.btnAchievements.clicked.connect(self.onOpenAchievements)
         headerLayout.addWidget(self.btnAchievements)
 
-        # Sound Toggle Button
+        # Sound Quick Toggle Button
         self.btnSound = QPushButton("🔊")
         self.btnSound.setFixedWidth(36)
         self.btnSound.setObjectName("BtnSecondary")
-        self.btnSound.setToolTip("Ativar/Desativar efeitos sonoros retrô")
+        self.btnSound.setToolTip("Silenciar/Ativar efeitos sonoros rapidamente")
         self.btnSound.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnSound.clicked.connect(self.onToggleSound)
         headerLayout.addWidget(self.btnSound)
+
+        # Central Configuration Button
+        self.btnConfig = QPushButton("⚙️ Config")
+        self.btnConfig.setObjectName("BtnConfig")
+        self.btnConfig.setToolTip("Abrir painel completo de configurações (Tema, Fundo, Sons, Streamer, Fontes e Banco)")
+        self.btnConfig.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btnConfig.clicked.connect(self.onOpenConfigDialog)
+        headerLayout.addWidget(self.btnConfig)
 
         # YouTube Channels (Configurados no .ini)
         mainChannelUrl = getattr(self.config, 'streamerYouTubeMainChannel', '').strip()
@@ -585,11 +669,11 @@ class GamingDashboard(QMainWindow):
 
         headerLayout.addStretch()
 
-        # 5 Stat Cards
-        self.statTotal = self.createStatCard("0", "CATÁLOGO")
-        self.statInstalled = self.createStatCard("0", "INSTALADOS")
-        self.statPlayed = self.createStatCard("0", "SESSÕES")
-        self.statFinished = self.createStatCard("0", "ZERADOS")
+        # 5 Stat Cards - Selva de Jogos & Conquistas
+        self.statTotal = self.createStatCard("0", "TERRITÓRIO")
+        self.statInstalled = self.createStatCard("0", "NA TOCA (INSTALADOS)")
+        self.statPlayed = self.createStatCard("0", "CAÇADAS (SESSÕES)")
+        self.statFinished = self.createStatCard("0", "DOMADOS (ZERADOS)")
         self.statBacklog = self.createStatCard("0%", "CONCLUÍDO")
 
         headerLayout.addWidget(self.statTotal)
@@ -626,32 +710,32 @@ class GamingDashboard(QMainWindow):
         navLayout = QHBoxLayout()
         navLayout.setSpacing(10)
 
-        self.btnNavMain = QPushButton("🎲 Sorteador & Explorador")
+        self.btnNavMain = QPushButton("🐾 Sorteador & Explorador")
         self.btnNavMain.setProperty("class", "NavBtn")
         self.btnNavMain.setCheckable(True)
         self.btnNavMain.setChecked(True)
         self.btnNavMain.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnNavMain.clicked.connect(lambda: self.switchView(0))
 
-        self.btnNavGotd = QPushButton("🌟 Jogo do Dia")
+        self.btnNavGotd = QPushButton("❄️ Instinto Selvagem (Jogo do Dia)")
         self.btnNavGotd.setProperty("class", "NavBtn")
         self.btnNavGotd.setCheckable(True)
         self.btnNavGotd.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnNavGotd.clicked.connect(lambda: self.switchView(1))
 
-        self.btnNavGoty = QPushButton("🏆 Jogos do Ano (GOTY)")
+        self.btnNavGoty = QPushButton("🏆 Hall do GOTY (Ouro de Klondike)")
         self.btnNavGoty.setProperty("class", "NavBtn")
         self.btnNavGoty.setCheckable(True)
         self.btnNavGoty.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnNavGoty.clicked.connect(lambda: self.switchView(2))
 
-        self.btnNavChatChoice = QPushButton("🗳️ Escolha do Chat")
+        self.btnNavChatChoice = QPushButton("🐺 Escolha da Matilha (Chat)")
         self.btnNavChatChoice.setProperty("class", "NavBtn")
         self.btnNavChatChoice.setCheckable(True)
         self.btnNavChatChoice.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnNavChatChoice.clicked.connect(lambda: self.switchView(3))
 
-        self.btnNavLiveHistory = QPushButton("📜 Histórico de Lives")
+        self.btnNavLiveHistory = QPushButton("📜 Trilhas Percorridas (Lives)")
         self.btnNavLiveHistory.setProperty("class", "NavBtn")
         self.btnNavLiveHistory.setCheckable(True)
         self.btnNavLiveHistory.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -675,7 +759,7 @@ class GamingDashboard(QMainWindow):
         self.chkRoulette = QCheckBox("🎰 Roleta Live")
         self.chkRoulette.setChecked(getattr(self.config, 'streamerRouletteEnabled', True))
         self.chkRoulette.setToolTip("Ativa o efeito visual de slot machine/roleta com suspense antes de revelar o jogo")
-        self.chkRoulette.setStyleSheet("color: #00cec9; font-weight: bold; font-size: 11px;")
+        self.chkRoulette.setStyleSheet("color: #38bdf8; font-weight: bold; font-size: 11px;")
         navLayout.addWidget(self.chkRoulette)
 
         self.btnObsOverlay = QPushButton("🎥 Overlay OBS")
@@ -691,7 +775,7 @@ class GamingDashboard(QMainWindow):
         self.sessionBar = QFrame()
         self.sessionBar.setStyleSheet("""
             QFrame {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1e1b4b, stop:0.5 #0f172a, stop:1 #064e3b);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0f1c2b, stop:0.5 #091724, stop:1 #064e3b);
                 border: 2px solid #10b981;
                 border-radius: 10px;
                 padding: 6px 14px;
@@ -701,7 +785,7 @@ class GamingDashboard(QMainWindow):
         sLayout.setContentsMargins(8, 4, 8, 4)
         sLayout.setSpacing(12)
 
-        self.lblSessionStatus = QLabel("🔴 SESSÃO DE GAMEPLAY ATIVA:")
+        self.lblSessionStatus = QLabel("🐺 CAÇADA / GAMEPLAY ATIVA:")
         self.lblSessionStatus.setStyleSheet("color: #34d399; font-weight: 900; font-size: 12px; letter-spacing: 0.5px;")
         sLayout.addWidget(self.lblSessionStatus)
 
@@ -763,38 +847,38 @@ class GamingDashboard(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
-        # Quick Live Themes Bar
+        # Quick Live Themes Bar - Yukon Instincts
         themeRow = QHBoxLayout()
         themeRow.setSpacing(8)
-        themeLbl = QLabel("🎯 TEMA DA LIVE:")
+        themeLbl = QLabel("🐺 INSTINTO & TEMA:")
         themeLbl.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-        themeLbl.setStyleSheet("color: #00cec9; letter-spacing: 1px;")
+        themeLbl.setStyleSheet("color: #38bdf8; letter-spacing: 1px;")
         themeRow.addWidget(themeLbl)
 
         themes = [
-            ("🌟 Todos", "all"),
-            ("🆕 Backlog Zero (0x)", "backlog"),
-            ("🎮 Emuladores", "emulators"),
+            ("❄️ Todo o Território", "all"),
+            ("🐺 Presas Intocadas (0x)", "backlog"),
+            ("🎮 Consoles & Emuladores", "emulators"),
             ("🕹️ Só Retrô (eXoDOS)", "retro"),
             ("🚀 Só PC / Lojas", "modern"),
-            ("⭐ Favoritos", "favorites")
+            ("⭐ Favoritos da Matilha", "favorites")
         ]
         for t_label, t_mode in themes:
             btn = QPushButton(t_label)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #161a24;
-                    border: 1px solid #2b3244;
+                    background-color: #0c1522;
+                    border: 1px solid #1c2f44;
                     border-radius: 6px;
                     padding: 5px 12px;
                     font-size: 11px;
                     font-weight: bold;
-                    color: #cbd5e1;
+                    color: #c8daea;
                 }
                 QPushButton:hover {
-                    background-color: #222938;
-                    border-color: #00cec9;
+                    background-color: #152438;
+                    border-color: #38bdf8;
                     color: #ffffff;
                 }
             """)
@@ -826,14 +910,14 @@ class GamingDashboard(QMainWindow):
 
         # Section Header
         heroHeader = QHBoxLayout()
-        headerText = QLabel("🎯 JOGO SORTEADO")
+        headerText = QLabel("🐺 PRESA SORTEADA")
         headerText.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-        headerText.setStyleSheet("color: #00cec9; letter-spacing: 1px;")
+        headerText.setStyleSheet("color: #38bdf8; letter-spacing: 1px;")
         
         self.installBadge = QLabel("✔ INSTALADO")
         self.installBadge.setObjectName("InstallBadge")
         self.installBadge.setStyleSheet(
-            "background-color: #00b894; color: #ffffff; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;"
+            "background-color: #059669; color: #ffffff; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;"
         )
 
         self.platformBadge = QLabel("LOCAL")
@@ -842,7 +926,7 @@ class GamingDashboard(QMainWindow):
         self.hltbBadge = QLabel("⏱️ HLTB: --")
         self.hltbBadge.setObjectName("HltbBadge")
         self.hltbBadge.setStyleSheet(
-            "background-color: #8b5cf6; color: #ffffff; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;"
+            "background-color: #0284c7; color: #ffffff; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;"
         )
         
         heroHeader.addWidget(headerText)
@@ -910,15 +994,15 @@ class GamingDashboard(QMainWindow):
         self.challengeBanner.hide()
         layout.addWidget(self.challengeBanner)
 
-        # Big Play Button
-        self.btnPlay = QPushButton("▶  JOGAR AGORA")
+        # Big Play Button - Caçar
+        self.btnPlay = QPushButton("▶  CAÇAR AGORA (JOGAR)")
         self.btnPlay.setObjectName("BtnPlay")
         self.btnPlay.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnPlay.clicked.connect(self.onPlayHero)
         layout.addWidget(self.btnPlay)
 
-        # Reroll Button
-        self.btnReroll = QPushButton("🎲  SORTEAR NOVO JOGO (REROLL)")
+        # Reroll Button - Nova Presa
+        self.btnReroll = QPushButton("🎲  SORTEAR NOVA PRESA (REROLL)")
         self.btnReroll.setObjectName("BtnReroll")
         self.btnReroll.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnReroll.clicked.connect(self.onRerollHero)
@@ -1067,16 +1151,16 @@ class GamingDashboard(QMainWindow):
 
     def buildDatabaseBrowser(self):
         container = QFrame()
-        container.setStyleSheet("background-color: #12151d; border: 1px solid #242b3b; border-radius: 14px; padding: 14px;")
+        container.setStyleSheet("background-color: #0c1420; border: 1px solid #1c2f44; border-radius: 14px; padding: 14px;")
         layout = QVBoxLayout(container)
         layout.setSpacing(10)
 
         # Header with Search and Filter
         topRow = QHBoxLayout()
         
-        browserTitle = QLabel("📚 EXPLORADOR DO BANCO")
+        browserTitle = QLabel("📚 TERRITÓRIO DO BANCO DE JOGOS")
         browserTitle.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-        browserTitle.setStyleSheet("color: #ffffff; letter-spacing: 1px;")
+        browserTitle.setStyleSheet("color: #f0f6fc; letter-spacing: 1px;")
         topRow.addWidget(browserTitle)
         topRow.addStretch()
 
@@ -1146,9 +1230,9 @@ class GamingDashboard(QMainWindow):
 
         # Header tag
         tagRow = QHBoxLayout()
-        tagLabel = QLabel("🌟 RECOMENDAÇÃO DO DIA • 100% INSTALADO NO SEU PC")
+        tagLabel = QLabel("❄️ INSTINTO SELVAGEM • RECOMENDAÇÃO DO DIA (INSTALADO NO PC)")
         tagLabel.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-        tagLabel.setStyleSheet("color: #00cec9; letter-spacing: 1px;")
+        tagLabel.setStyleSheet("color: #38bdf8; letter-spacing: 1px;")
         tagRow.addWidget(tagLabel)
         tagRow.addStretch()
 
@@ -1159,7 +1243,7 @@ class GamingDashboard(QMainWindow):
 
         # Image cover
         imgFrame = QFrame()
-        imgFrame.setStyleSheet("background-color: #0d0f14; border: 1px solid #242b3b; border-radius: 12px;")
+        imgFrame.setStyleSheet("background-color: #080d14; border: 1px solid #1c2f44; border-radius: 12px;")
         imgLayout = QVBoxLayout(imgFrame)
         imgLayout.setContentsMargins(8, 8, 8, 8)
 
@@ -1186,14 +1270,14 @@ class GamingDashboard(QMainWindow):
         cardLayout.addSpacing(10)
 
         # Big Play Button
-        self.btnGotdPlay = QPushButton("▶  JOGAR JOGO DO DIA AGORA")
+        self.btnGotdPlay = QPushButton("▶  CAÇAR JOGO DO DIA AGORA")
         self.btnGotdPlay.setObjectName("BtnPlay")
         self.btnGotdPlay.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnGotdPlay.clicked.connect(self.onPlayGotd)
         cardLayout.addWidget(self.btnGotdPlay)
 
         # Reroll Button
-        self.btnGotdReroll = QPushButton("🎲  SORTEAR OUTRA RECOMENDAÇÃO DO DIA")
+        self.btnGotdReroll = QPushButton("🎲  SORTEAR OUTRA RECOMENDAÇÃO SELVAGEM")
         self.btnGotdReroll.setObjectName("BtnReroll")
         self.btnGotdReroll.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnGotdReroll.clicked.connect(lambda: self.onRerollGotd(initial=False))
@@ -1227,9 +1311,9 @@ class GamingDashboard(QMainWindow):
 
         # Year & Tag Row
         topRow = QHBoxLayout()
-        self.gotyYearBadge = QLabel("🏆 GAME OF THE YEAR - ANO 2024")
+        self.gotyYearBadge = QLabel("🏆 OURO DE KLONDIKE • GOTY DO ANO 2024")
         self.gotyYearBadge.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        self.gotyYearBadge.setStyleSheet("color: #d4af37; letter-spacing: 1px;")
+        self.gotyYearBadge.setStyleSheet("color: #fbbf24; letter-spacing: 1px;")
         topRow.addWidget(self.gotyYearBadge)
         topRow.addStretch()
 
@@ -1362,9 +1446,9 @@ class GamingDashboard(QMainWindow):
 
         # Header Bar
         header = QHBoxLayout()
-        hTitle = QLabel("🗳️ ESCOLHA DO CHAT • ENQUETE AO VIVO DO YOUTUBE")
+        hTitle = QLabel("🐺 ESCOLHA DA MATILHA • ENQUETE AO VIVO DO YOUTUBE")
         hTitle.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        hTitle.setStyleSheet("color: #00cec9; letter-spacing: 1px;")
+        hTitle.setStyleSheet("color: #38bdf8; letter-spacing: 1px;")
         header.addWidget(hTitle)
         header.addStretch()
 
@@ -1375,14 +1459,14 @@ class GamingDashboard(QMainWindow):
         self.btnCopyPoll.clicked.connect(self.onCopyChatPoll)
         header.addWidget(self.btnCopyPoll)
 
-        self.btnRerollTrio = QPushButton("🎲 Sortear 3 Novas Opções")
+        self.btnRerollTrio = QPushButton("🎲 Sortear 3 Novas Presas")
         self.btnRerollTrio.setObjectName("BtnReroll")
         self.btnRerollTrio.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btnRerollTrio.clicked.connect(self.onRerollChatChoice)
         header.addWidget(self.btnRerollTrio)
         layout.addLayout(header)
 
-        hint = QLabel("💡 Sorteie 3 jogos distintos instalados no seu PC. Abra a enquete na sua live do YouTube e clique em 'JOGAR' na opção mais votada pelo seu público!")
+        hint = QLabel("💡 Sorteie 3 presas instaladas no seu PC. A matilha no chat vota e você clica em 'JOGAR' no vencedor escolhido!")
         hint.setStyleSheet("color: #8c96a8; font-size: 11px; font-style: italic;")
         layout.addWidget(hint)
 
@@ -1392,16 +1476,16 @@ class GamingDashboard(QMainWindow):
         self.trioCards = []
 
         labels = [
-            ("OPÇÃO A", "#00cec9", "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00b894, stop:1 #00cec9)", "#0d0f14"),
-            ("OPÇÃO B", "#fdcb6e", "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e67e22, stop:1 #fdcb6e)", "#0d0f14"),
-            ("OPÇÃO C", "#e17055", "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #d63031, stop:1 #e17055)", "#ffffff")
+            ("PRESA A (Gélida)", "#38bdf8", "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284c7, stop:1 #38bdf8)", "#080d14"),
+            ("PRESA B (Ouro Klondike)", "#f59e0b", "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #d97706, stop:1 #fbbf24)", "#080d14"),
+            ("PRESA C (Boreal)", "#10b981", "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #059669, stop:1 #34d399)", "#080d14")
         ]
         for i, (opt_name, color, btn_gradient, btn_text_color) in enumerate(labels):
             card = QFrame()
             card.setObjectName(f"TrioCard_{i}")
             card.setStyleSheet(f"""
                 QFrame#TrioCard_{i} {{
-                    background-color: #12151d;
+                    background-color: #0c1420;
                     border: 2px solid {color};
                     border-radius: 14px;
                     padding: 14px;
@@ -1412,8 +1496,8 @@ class GamingDashboard(QMainWindow):
 
             # Option Badge
             optBadge = QLabel(opt_name)
-            optBadge.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-            optBadge.setStyleSheet(f"background-color: {color}; color: #0d0f14; border-radius: 6px; padding: 4px 12px; font-weight: bold; border: none;")
+            optBadge.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+            optBadge.setStyleSheet(f"background-color: {color}; color: #080d14; border-radius: 6px; padding: 4px 12px; font-weight: bold; border: none;")
             optBadge.setAlignment(Qt.AlignmentFlag.AlignCenter)
             cLayout.addWidget(optBadge)
 
@@ -1422,8 +1506,8 @@ class GamingDashboard(QMainWindow):
             imgFrame.setObjectName(f"TrioImgFrame_{i}")
             imgFrame.setStyleSheet(f"""
                 QFrame#TrioImgFrame_{i} {{
-                    background-color: #0d0f14;
-                    border: 1px solid #242b3b;
+                    background-color: #080d14;
+                    border: 1px solid #1c2f44;
                     border-radius: 10px;
                 }}
             """)
@@ -1557,9 +1641,9 @@ class GamingDashboard(QMainWindow):
 
         # Header Bar
         topBar = QHBoxLayout()
-        hTitle = QLabel("📜 HISTÓRICO DE TRANSMISSÕES AO VIVO NO YOUTUBE")
+        hTitle = QLabel("📜 TRILHAS PERCORRIDAS • HISTÓRICO DE TRANSMISSÕES AO VIVO")
         hTitle.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        hTitle.setStyleSheet("color: #d4af37; letter-spacing: 1px;")
+        hTitle.setStyleSheet("color: #fbbf24; letter-spacing: 1px;")
         topBar.addWidget(hTitle)
         topBar.addStretch()
 
@@ -1870,6 +1954,8 @@ class GamingDashboard(QMainWindow):
     # Logics & Updates: Game of the Day (GOTD)
     # -------------------------------------------------------------
     def onRerollGotd(self, initial=False):
+        if not initial:
+            get_sound_manager().play("wolf_growl")
         chosen = getGameOfTheDay(self.content, seed_date=initial)
         if not chosen:
             chosen = self.currentChoice
@@ -1953,7 +2039,9 @@ class GamingDashboard(QMainWindow):
     # -------------------------------------------------------------
     # Logics & Updates: Game of the Year (GOTY)
     # -------------------------------------------------------------
-    def onRerollGoty(self):
+    def onRerollGoty(self, initial=False):
+        if not initial:
+            get_sound_manager().play("pack_victory")
         goty = getRandomGoty()
         if not goty:
             return
@@ -2327,6 +2415,7 @@ class GamingDashboard(QMainWindow):
         if hasattr(self, 'chkRoulette') and self.chkRoulette.isChecked():
             self.startRouletteAnimation(do_pick)
         else:
+            get_sound_manager().play("reveal")
             do_pick()
 
     def onCleanDatabase(self):
@@ -2552,7 +2641,8 @@ class GamingDashboard(QMainWindow):
     def startRouletteAnimation(self, on_finished_callback):
         if hasattr(self, '_rouletteTimer') and self._rouletteTimer and self._rouletteTimer.isActive():
             return
-        
+
+        get_sound_manager().play("blizzard_wind")
         self._rouletteTicks = 0
         self._rouletteTotalTicks = 16
         self._rouletteInterval = 60
@@ -2565,7 +2655,11 @@ class GamingDashboard(QMainWindow):
 
     def _onRouletteTick(self):
         self._rouletteTicks += 1
-        get_sound_manager().play("tick")
+        if self._rouletteTicks % 2 == 0:
+            get_sound_manager().play("snow_crunch")
+        else:
+            get_sound_manager().play("tick")
+
         if self.content:
             cand = random.choice(self.content)
             self.gameTitleLabel.setText(f"🎲 {formatDisplayName(cand)}...")
@@ -2579,6 +2673,7 @@ class GamingDashboard(QMainWindow):
         if self._rouletteTicks >= self._rouletteTotalTicks:
             self._rouletteTimer.stop()
             self.btnReroll.setEnabled(True)
+            get_sound_manager().play("reveal")
             if self._rouletteCallback:
                 self._rouletteCallback()
 
@@ -2948,7 +3043,7 @@ class GamingDashboard(QMainWindow):
 
     def onRecordCurrentHeroLive(self):
         name = formatDisplayName(self.currentChoice)
-        self.liveHistoryMgr.recordLive(gameName=self.currentChoice, notes="Sorteado pelo Choose Random Game")
+        self.liveHistoryMgr.recordLive(gameName=self.currentChoice, notes="Sorteado pelo Canino Gaming")
         QMessageBox.information(self, "Live Gravada!", f"O jogo '{name}' foi registrado com sucesso no histórico de transmissões ao vivo!")
         self.refreshLiveHistoryTable()
 
@@ -2977,6 +3072,125 @@ class GamingDashboard(QMainWindow):
         is_muted = sm.toggle_mute()
         self.btnSound.setText("🔇" if is_muted else "🔊")
         sm.play("click")
+
+    def onOpenConfigDialog(self):
+        """Opens the unified configuration window for Canino Gaming."""
+        get_sound_manager().play("click")
+        dlg = ConfigDialog(parent=self, config=self.config)
+        dlg.exec()
+
+    # -------------------------------------------------------------
+    # Caninos Brancos (White Fang) Theme, Book Editions & Audio
+    # -------------------------------------------------------------
+    def onOpenThemeMenu(self):
+        menu = QMenu(self)
+
+        presets = [
+            ("🐺 Edição L&PM Pocket (Capa Oficial)", "assets/backgrounds/caninos_brancos_lpm.png", 0.22),
+            ("🌌 Aurora Boreal do Yukon (Edição Ártica)", "assets/backgrounds/white_fang_boreal_aurora.jpg", 0.20),
+            ("📜 Edição Clássica Macmillan 1906 (Trilha de Neve)", "assets/backgrounds/white_fang_classic_1906.jpg", 0.18),
+            ("⬛ Fundo Escuro Puro (Sem Imagem)", "", 0.0),
+        ]
+
+        current_bg = self.bgImagePath.replace("\\", "/").strip()
+        for title, path, def_opacity in presets:
+            norm_path = path.replace("\\", "/").strip()
+            is_active = (current_bg == norm_path) or (not path and not current_bg)
+            label = f"✔ {title}" if is_active else f"   {title}"
+            action = menu.addAction(label)
+            action.triggered.connect(lambda checked, p=path, o=def_opacity: self.setBackgroundPreset(p, o))
+
+        menu.addSeparator()
+
+        # Custom Image action
+        actCustom = menu.addAction("📁 Escolher Imagem Personalizada...")
+        actCustom.triggered.connect(self.onChooseCustomBackground)
+
+        # Opacity Submenu
+        opacityMenu = menu.addMenu("🎚️ Opacidade do Fundo")
+        for pct, op_val in [
+            ("10% (Muito Sutil)", 0.10),
+            ("18% (Discreto)", 0.18),
+            ("22% (Equilibrado / Padrão)", 0.22),
+            ("32% (Marcante)", 0.32),
+            ("45% (Intenso)", 0.45)
+        ]:
+            is_op_active = abs(self.bgOpacity - op_val) < 0.03
+            lbl = f"✔ {pct}" if is_op_active else f"   {pct}"
+            op_act = opacityMenu.addAction(lbl)
+            op_act.triggered.connect(lambda checked, v=op_val: self.setBackgroundPreset(self.bgImagePath, v))
+
+        menu.addSeparator()
+
+        # Thematic Sound Toggle
+        sm = get_sound_manager()
+        theme_sounds_active = sm.is_theme_mode()
+        sound_lbl = "✔ 🐺 Sons Selvagens de Caninos Brancos (Uivos/Nevasca)" if theme_sounds_active else "   🐺 Sons Selvagens de Caninos Brancos (Uivos/Nevasca)"
+        actThemeSounds = menu.addAction(sound_lbl)
+        actThemeSounds.triggered.connect(self.onToggleThemeSounds)
+
+        menu.addSeparator()
+
+        # Jack London Tribute / Info
+        actInfo = menu.addAction("📖 Sobre o Tema Caninos Brancos...")
+        actInfo.triggered.connect(self.onShowThemeInfo)
+
+        menu.exec(self.btnTheme.mapToGlobal(self.btnTheme.rect().bottomLeft()))
+
+    def setBackgroundPreset(self, path: str, opacity: float = None):
+        """Applies a background image preset and persists settings to choose_random_game.ini."""
+        if opacity is not None:
+            self.bgOpacity = opacity
+        self.bgImagePath = path or ""
+        if self.bgImagePath and os.path.exists(self.bgImagePath):
+            self._bgPixmap = QPixmap(self.bgImagePath)
+        else:
+            self._bgPixmap = None
+
+        if hasattr(self, 'centralContainer'):
+            self.centralContainer.setBackground(self._bgPixmap, self.bgOpacity)
+
+        self.config.save_theme_setting(self.bgImagePath, self.bgOpacity)
+        get_sound_manager().play("snow_crunch")
+
+    def onChooseCustomBackground(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Selecionar Imagem de Fundo (Caninos Brancos / Personalizada)",
+            "",
+            "Imagens (*.png *.jpg *.jpeg *.webp *.bmp)"
+        )
+        if file_path:
+            self.setBackgroundPreset(file_path, self.bgOpacity)
+
+    def onToggleThemeSounds(self):
+        sm = get_sound_manager()
+        new_state = not sm.is_theme_mode()
+        sm.set_theme_mode(new_state)
+        self.config.save_theme_setting(theme_sounds=new_state)
+        if new_state:
+            sm.play("wolf_howl")
+        else:
+            sm.play("reveal")
+
+    def onShowThemeInfo(self):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Canino Gaming • Homenagem a Jack London")
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setTextFormat(Qt.TextFormat.RichText)
+        msg.setText(
+            "<h3>🐺 Caninos Brancos (White Fang) & Canino Gaming</h3>"
+            "<p>Inspirado na obra-prima atemporal de <b>Jack London</b> (1906), ambientada na selvagem corrida do ouro de Klondike no território de Yukon.</p>"
+            "<p>Assim como o lobo Caninos Brancos desbrava a floresta ártica, o <b>Canino Gaming</b> é a sua matilha para domar a vastidão do seu backlog gamer!</p>"
+            "<b>Recursos do Tema:</b>"
+            "<ul>"
+            "<li><b>Edições do Livro:</b> Capa L&PM Pocket original, Aurora Boreal de Yukon e Macmillan 1906 clássica.</li>"
+            "<li><b>Sons da Selva:</b> Uivos do lobo, rajadas de nevasca, passos na neve fofa e rosnados selvagens.</li>"
+            "<li><b>Paleta Ártica:</b> Azuis glaciais, ciano boreal, ouro de Klondike e noite ártica.</li>"
+            "</ul>"
+            "<p><i>'Nas profundezas do Wild não há som algum; é um silêncio majestoso onde o coração da terra bate devagar.'</i></p>"
+        )
+        msg.exec()
 
     def onOpenCuratorPitch(self):
         get_sound_manager().play("click")
