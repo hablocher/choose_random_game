@@ -23,12 +23,14 @@ def _get_backup_dir() -> str:
     return target
 
 
-def backup_game_saves(game_entry: str, custom_destination: Optional[str] = None) -> Dict:
+def backup_game_saves(game_entry: Optional[str] = None, custom_destination: Optional[str] = None) -> Dict:
     """
-    Creates a timestamped .zip backup of game saves or configuration.
+    Creates a timestamped .zip backup of game saves or configuration/database.
     Returns status dict with archive path and file count.
     """
-    display_name = formatDisplayName(game_entry)
+    if not game_entry:
+        game_entry = "Canino_Gaming_Backup"
+    display_name = formatDisplayName(game_entry) if game_entry != "Canino_Gaming_Backup" else "Canino Gaming Full Database & Config"
     clean_name = clean_title_for_hltb(display_name)
     safe_slug = "".join(c for c in clean_name if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
     timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -38,8 +40,15 @@ def backup_game_saves(game_entry: str, custom_destination: Optional[str] = None)
     zip_filepath = os.path.join(backup_root, zip_filename)
 
     candidate_dirs = []
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # If full database backup requested
+    if game_entry == "Canino_Gaming_Backup":
+        for fname in ("Games.db", "choose_random_game.ini", "playnite_games.json"):
+            fpath = os.path.join(project_root, fname)
+            if os.path.exists(fpath):
+                candidate_dirs.append(fpath)
     # 1. Local path checks
-    if not game_entry.startswith("playnite:") and not game_entry.startswith("steam:") and os.path.exists(game_entry):
+    elif not game_entry.startswith("playnite:") and not game_entry.startswith("steam:") and os.path.exists(game_entry):
         if os.path.isdir(game_entry):
             # Check common subfolder names for saves
             for sub in ("saves", "save", "savegame", "savegames", "profile", "profiles", "userdata"):

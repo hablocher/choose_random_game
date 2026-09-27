@@ -60,6 +60,20 @@ class TwitchChatBot(QObject):
     def is_connected(self) -> bool:
         return self._running and self._socket is not None
 
+    @property
+    def is_running(self) -> bool:
+        return self.is_connected()
+
+    def start(self, channel: Optional[str] = None) -> bool:
+        self.start_bot(channel)
+        return self._running
+
+    def stop(self):
+        self.stop_bot()
+
+    def set_vote_callback(self, callback: Callable[[int], None]):
+        self.vote_received.connect(lambda idx, user: callback(idx))
+
     def _run_irc_loop(self):
         server = "irc.chat.twitch.tv"
         port = 6697
@@ -111,8 +125,9 @@ class TwitchChatBot(QObject):
                     break
 
         except Exception as e:
-            logger.warning(f"Error connecting to Twitch IRC: {e}")
-            self.status_changed.emit(False, f"Erro de conexão: {e}")
+            if self._running:
+                logger.warning(f"Error connecting to Twitch IRC: {e}")
+                self.status_changed.emit(False, f"Erro de conexão: {e}")
         finally:
             self._running = False
             self.status_changed.emit(False, "Desconectado.")

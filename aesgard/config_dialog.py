@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QLineEdit, QCheckBox, QSlider, QSpinBox, QComboBox, QFileDialog,
     QTabWidget, QFrame, QScrollArea, QMessageBox, QGroupBox
 )
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QFont, QPixmap, QIcon, QColor
 
 from aesgard.sound import get_sound_manager
@@ -207,10 +207,19 @@ class ConfigDialog(QDialog):
     """
     Dedicated unified configuration window for Canino Gaming.
     """
+    themeChanged = pyqtSignal(str, float, bool)
+
     def __init__(self, parent=None, config=None):
-        super().__init__(parent)
-        self.dashboard = parent
-        self.config = config
+        if not isinstance(parent, QWidget) and parent is not None:
+            actual_config = parent
+            actual_parent = config if isinstance(config, QWidget) else None
+        else:
+            actual_parent = parent
+            actual_config = config
+
+        super().__init__(actual_parent)
+        self.dashboard = actual_parent
+        self.config = actual_config
         self.setWindowTitle("⚙️ Configurações • Canino Gaming")
         self.resize(760, 600)
         self.setMinimumSize(700, 540)
@@ -699,10 +708,14 @@ class ConfigDialog(QDialog):
             sm.set_volume(self.sliderVolume.value() / 100.0)
 
             # Apply background immediately to parent dashboard
+            new_bg = self.txtBgPath.text().strip()
+            new_op = self.sliderOpacity.value() / 100.0
+            theme_sounds = self.chkThemeSounds.isChecked()
+
             if self.dashboard and hasattr(self.dashboard, 'setBackgroundPreset'):
-                new_bg = self.txtBgPath.text().strip()
-                new_op = self.sliderOpacity.value() / 100.0
                 self.dashboard.setBackgroundPreset(new_bg, new_op)
+
+            self.themeChanged.emit(new_bg, new_op, theme_sounds)
 
             # Audio confirmation
             sm.play("snow_crunch")
@@ -813,10 +826,33 @@ class ConfigDialog(QDialog):
     def onTriggerSyncSources(self):
         if self.dashboard and hasattr(self.dashboard, 'onSyncSources'):
             self.dashboard.onSyncSources()
+        else:
+            try:
+                from aesgard.gameutil import scanAllSources
+                from aesgard.database import importContentToDatabase
+                new_content = scanAllSources()
+                importContentToDatabase(new_content)
+                if self.dashboard:
+                    self.dashboard.content = new_content
+                    self.dashboard.refreshStats()
+                    self.dashboard.refreshTable()
+                QMessageBox.information(self, "Sincronização", f"Sincronização concluída! {len(new_content)} jogos encontrados.")
+            except Exception as e:
+                QMessageBox.warning(self, "Sincronização", f"Erro ao sincronizar: {e}")
 
     def onTriggerCleanDb(self):
         if self.dashboard and hasattr(self.dashboard, 'onCleanDatabase'):
             self.dashboard.onCleanDatabase()
+        else:
+            try:
+                from aesgard.database import getInstalledGamesSet
+                installed = getInstalledGamesSet()
+                if self.dashboard:
+                    self.dashboard.refreshStats()
+                    self.dashboard.refreshTable()
+                QMessageBox.information(self, "Limpeza do Banco", f"Verificação concluída! {len(installed)} jogos instalados confirmados.")
+            except Exception as e:
+                QMessageBox.warning(self, "Limpeza do Banco", f"Erro ao verificar banco: {e}")
 
     def onTriggerBackup(self):
         res = backup_game_saves()
